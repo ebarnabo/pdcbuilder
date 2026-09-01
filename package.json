@@ -1,0 +1,48 @@
+{
+  "name": "pdc-builder",
+  "version": "1.0.0",
+  "description": "Atelier de projets web — scaffolding, librairies, blueprints et IA locale.",
+  "main": "./out/main/index.js",
+  "author": "PDC Design",
+  "type": "module",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "start": "electron-vite preview",
+    "build": "electron-vite build",
+    "pack:mac": "npm run build && electron-builder --mac",
+    "pack:win": "npm run build && electron-builder --win",
+    "pack:all": "npm run build && electron-builder -mw"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^2.3.0",
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "vite": "^5.4.11"
+  },
+  "build": {
+    "appId": "com.pdcdesign.builder",
+    "productName": "PDC Builder",
+    "directories": { "output": "release" },
+    "files": ["out/**/*", "resources/**/*"],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": ["dmg", "zip"],
+      "artifactName": "PDC-Builder-${version}-${arch}.${ext}"
+    },
+    "win": {
+      "target": ["nsis", "portable"],
+      "artifactName": "PDC-Builder-${version}-setup.${ext}"
+    },
+    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true }
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["electron", "esbuild"]
+  }
+}

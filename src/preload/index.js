@@ -1,0 +1,61 @@
+import { contextBridge, ipcRenderer } from 'electron'
+
+const invoke = (channel) => (...args) => ipcRenderer.invoke(channel, ...args)
+
+const api = {
+  platform: process.platform,
+
+  state: {
+    get: invoke('state:get'),
+    patch: invoke('state:patch'),
+    resetCatalog: invoke('state:reset-catalog')
+  },
+  fs: {
+    pickDir: invoke('fs:pick-dir'),
+    openPath: invoke('fs:open-path'),
+    reveal: invoke('fs:reveal'),
+    openUrl: invoke('fs:open-url'),
+    exists: invoke('fs:exists'),
+    write: invoke('fs:write'),
+    read: invoke('fs:read'),
+    tree: invoke('fs:tree')
+  },
+  project: {
+    create: invoke('project:create'),
+    import: invoke('project:import'),
+    duplicate: invoke('project:duplicate'),
+    remove: invoke('project:delete'),
+    update: invoke('project:update'),
+    addLibs: invoke('project:add-libs')
+  },
+  run: {
+    dev: invoke('run:dev'),
+    stop: invoke('run:stop'),
+    build: invoke('run:build'),
+    preview: invoke('run:preview'),
+    command: invoke('run:command'),
+    openBuild: invoke('run:open-build'),
+    openBuildFile: invoke('run:open-build-file'),
+    buildInfo: invoke('run:build-info')
+  },
+  blueprint: {
+    save: invoke('blueprint:save'),
+    remove: invoke('blueprint:delete'),
+    fromProject: invoke('blueprint:from-project')
+  },
+  ai: {
+    providers: invoke('ai:providers'),
+    models: invoke('ai:models'),
+    chat: invoke('ai:chat'),
+    stop: invoke('ai:stop')
+  },
+  editor: { open: invoke('app:open-editor') },
+
+  on: (channel, handler) => {
+    const listener = (_e, payload) => handler(payload)
+    ipcRenderer.on(channel, listener)
+    return () => ipcRenderer.removeListener(channel, listener)
+  }
+}
+
+contextBridge.exposeInMainWorld('pdc', api)
