@@ -13,7 +13,7 @@ const VIEWS = {
   projects: { label: 'Projets', icon: Boxes, title: 'Projets', sub: 'Créer, lancer, construire' },
   blueprints: { label: 'Blueprints', icon: Bookmark, title: 'Blueprints', sub: 'Bases réutilisables' },
   catalog: { label: 'Catalogue', icon: Layers, title: 'Catalogue', sub: 'Frameworks et librairies' },
-  settings: { label: 'Réglages', icon: Cog, title: 'Réglages', sub: 'Atelier, dépôts et IA' }
+  settings: { label: 'Réglages', icon: Cog, title: 'Réglages', sub: 'Atelier, dépôts, base et IA' }
 }
 const ORDER = Object.keys(VIEWS)
 const NAV_STEP = 46 // hauteur 42 + gap 4
@@ -35,6 +35,7 @@ export default function App() {
   const [update, setUpdate] = useState(null)
   const [docsStatus, setDocsStatus] = useState(null)
   const logRef = useRef(null)
+  const contentRef = useRef(null)
   const lastH = useRef(300)
 
   const refresh = useCallback(() => {
@@ -81,7 +82,10 @@ export default function App() {
     return () => unsub()
   }, [refresh])
 
-  useEffect(() => { logRef.current?.scrollTo({ top: 1e9, behavior: 'smooth' }) }, [logs, consoleH])
+  useEffect(() => {
+    const behavior = reduced() ? 'auto' : 'smooth'
+    logRef.current?.scrollTo({ top: 1e9, behavior })
+  }, [logs, consoleH])
 
   /* changement de vue animé par l'API View Transitions */
   const go = useCallback((id) => {
@@ -89,6 +93,11 @@ export default function App() {
     if (document.startViewTransition && !reduced()) {
       document.startViewTransition(() => flushSync(() => setView(id)))
     } else setView(id)
+  }, [view])
+
+  useEffect(() => {
+    contentRef.current?.scrollTo({ top: 0 })
+    setStuck(false)
   }, [view])
 
   const toggleConsole = useCallback(() => {
@@ -235,7 +244,8 @@ export default function App() {
         )}
 
         <div
-          className="content"
+          ref={contentRef}
+          className={`content${chatOpen ? ' with-chat' : ''}`}
           onScroll={(e) => setStuck(e.currentTarget.scrollTop > 8)}
           style={{ paddingBottom: panelH + 48 }}
         >

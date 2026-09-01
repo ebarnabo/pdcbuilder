@@ -68,6 +68,10 @@ const api = {
     refresh: invoke('docs:refresh'),
     open: invoke('docs:open')
   },
+  database: {
+    list: invoke('database:list'),
+    apply: invoke('database:apply')
+  },
 
   on: (channel, handler) => {
     const listener = (_e, payload) => handler(payload)

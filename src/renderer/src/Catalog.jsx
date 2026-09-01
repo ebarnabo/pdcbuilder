@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Plus, Trash2, Pencil, RotateCcw, Package, Terminal, BookOpen } from 'lucide-react'
-import { Modal, Field, Segmented } from './ui.jsx'
+import { Modal, Field, Segmented, Chevron, SearchBox } from './ui.jsx'
 import { api } from './bridge.js'
 const blankFw = {
   id: '', name: '', tag: '', description: '',
@@ -13,6 +13,8 @@ export default function Catalog({ state, refresh, toast, tab, setTab, docsStatus
   const [editFw, setEditFw] = useState(null)
   const [editLib, setEditLib] = useState(null)
   const [docsIndex, setDocsIndex] = useState([])
+  const [libQuery, setLibQuery] = useState('')
+  const [openCats, setOpenCats] = useState(() => (state.libraries[0] ? [state.libraries[0].id] : []))
 
   useEffect(() => {
     api.docs.index().then((r) => setDocsIndex(r?.packages || [])).catch(() => {})
@@ -54,6 +56,25 @@ export default function Catalog({ state, refresh, toast, tab, setTab, docsStatus
     refresh()
   }
 
+  const filteredLibs = useMemo(() => {
+    const q = libQuery.trim().toLowerCase()
+    if (!q) return state.libraries
+    return state.libraries
+      .map((c) => ({
+        ...c,
+        items: c.items.filter((i) =>
+          i.name.toLowerCase().includes(q)
+          || i.pkg.toLowerCase().includes(q)
+          || (i.description || '').toLowerCase().includes(q)
+        )
+      }))
+      .filter((c) => c.items.length > 0 || c.name.toLowerCase().includes(q))
+  }, [state.libraries, libQuery])
+
+  useEffect(() => {
+    if (libQuery.trim()) setOpenCats(filteredLibs.map((c) => c.id))
+  }, [libQuery, filteredLibs])
+
   return (
     <>
       <div className="section-head">
@@ -71,6 +92,9 @@ export default function Catalog({ state, refresh, toast, tab, setTab, docsStatus
           onChange={setTab}
           options={[{ value: 'frameworks', label: 'Frameworks' }, { value: 'libraries', label: 'Librairies' }]}
         />
+        {tab === 'libraries' && (
+          <SearchBox value={libQuery} onChange={setLibQuery} placeholder="Filtrer les paquets" />
+        )}
         <button className="btn" onClick={async () => { await api.state.resetCatalog(); refresh(); toast('Catalogue réinitialisé') }}>
           <RotateCcw size={15} /> Réinitialiser
         </button>
@@ -104,24 +128,45 @@ export default function Catalog({ state, refresh, toast, tab, setTab, docsStatus
           ))}
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-          {state.libraries.map((c) => (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {filteredLibs.length === 0 && (
+            <p className="card-desc">Aucune librairie ne correspond à « {libQuery} ».</p>
+          )}
+          {filteredLibs.map((c) => {
+            const open = openCats.includes(c.id)
+            return (
             <div className="lib-group" key={c.id}>
-              <div className="lib-head" style={{ cursor: 'default' }}>
-                <div style={{ flex: 1 }}>
-                  <h4>{c.name}</h4>
-                  <p>{c.description}</p>
-                </div>
-                <button className="btn sm ghost" onClick={() => setEditLib({ category: c.id })}><Plus size={14} /> Ajouter ici</button>
+              <div className="lib-head">
+                <button
+                  type="button"
+                  className="lib-toggle"
+                  onClick={() => setOpenCats((ids) => ids.includes(c.id) ? ids.filter((id) => id !== c.id) : [...ids, c.id])}
+                  aria-expanded={open}
+                >
+                  <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+                    <h4>{c.name}</h4>
+                    <p>{c.description}</p>
+                  </div>
+                  <span className="chip">{c.items.length}</span>
+                  <Chevron open={open} />
+                </button>
+                <button
+                  type="button"
+                  className="btn sm ghost"
+                  onClick={() => setEditLib({ category: c.id })}
+                >
+                  <Plus size={14} /> Ajouter ici
+                </button>
               </div>
+              {open && (
               <div className="lib-body">
                 {c.items.map((i) => {
                   const doc = docsIndex.find((d) => d.pkg === i.pkg)
                   const url = i.docs || doc?.docsUrl
                   return (
                   <div className="lib" key={i.pkg}>
-                    <Package size={16} color="var(--faint)" style={{ marginTop: 2, flex: 'none' }} />
-                    <span style={{ flex: 1 }}>
+                    <Package size={16} color="var(--text-3)" style={{ marginTop: 2, flex: 'none' }} />
+                    <span style={{ flex: 1, minWidth: 0 }}>
                       <strong>{i.name}{i.dev && <span className="chip" style={{ marginLeft: 6, height: 18 }}>dev</span>}</strong>
                       <small>{i.description}</small>
                       <small className="mono" style={{ color: 'var(--accent)', marginTop: 4 }}>{i.pkg}</small>
@@ -137,8 +182,10 @@ export default function Catalog({ state, refresh, toast, tab, setTab, docsStatus
                 })}
                 {c.items.length === 0 && <p className="card-desc">Catégorie vide.</p>}
               </div>
+              )}
             </div>
-          ))}
+            )
+          })}
         </div>
       )}
 

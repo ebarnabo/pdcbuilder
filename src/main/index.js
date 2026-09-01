@@ -9,6 +9,7 @@ import * as ai from './ai.js'
 import * as git from './git.js'
 import * as updater from './updater.js'
 import * as docs from './docs.js'
+import * as database from './database.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const isMac = platform() === 'darwin'
@@ -181,6 +182,23 @@ function installLibs(projectId, path, libs) {
   )
 }
 
+async function applyDatabase(projectId, path, frameworkId, databaseId) {
+  const db = database.byId(databaseId)
+  if (!db || db.id === 'none') return { ok: true, databaseId: 'none' }
+  const written = database.writeFiles(path, db.id, frameworkId)
+  for (const rel of database.relativeFiles(path, written.files)) {
+    runner.log(win, projectId, `fichier écrit : ${rel}`, 'ok')
+  }
+  let res = { ok: true }
+  if (written.packages.length) {
+    res = await runner.exec(win, projectId, `npm install ${written.packages.join(' ')}`, path, 'base de données')
+  }
+  if (res.ok && written.extraDev.length) {
+    res = await runner.exec(win, projectId, `npm install -D ${written.extraDev.join(' ')}`, path, 'base de données (dev)')
+  }
+  return { ok: res.ok, databaseId: db.id, error: res.error }
+}
+
 ipcMain.handle('project:create', async (_e, payload) => {
   const s = store.read()
   const fw = s.frameworks.find((f) => f.id === payload.frameworkId)
@@ -201,6 +219,7 @@ ipcMain.handle('project:create', async (_e, payload) => {
     frameworkId: fw.id,
     libs: payload.libs || [],
     blueprintId: payload.blueprintId || null,
+    databaseId: payload.databaseId || s.database?.defaultId || 'none',
     notes: payload.notes || '',
     createdAt: Date.now(),
     status: 'scaffolding',
@@ -213,6 +232,11 @@ ipcMain.handle('project:create', async (_e, payload) => {
   let res = await runner.exec(win, id, create, workspace, `création — ${fw.name}`)
   if (res.ok && fw.install) res = await runner.exec(win, id, fw.install, path, 'dépendances')
   if (res.ok && project.libs.length) res = await installLibs(id, path, project.libs)
+
+  if (res.ok && project.databaseId && project.databaseId !== 'none') {
+    const dbRes = await applyDatabase(id, path, fw.id, project.databaseId)
+    if (!dbRes.ok) res = dbRes
+  }
 
   // fichiers issus d'un blueprint
   const bp = s.blueprints.find((b) => b.id === payload.blueprintId)
@@ -429,6 +453,7 @@ ipcMain.handle('blueprint:from-project', (_e, { id, name }) => {
     description: `Créé depuis ${p.name}`,
     frameworkId: p.frameworkId,
     libs: p.libs,
+    databaseId: p.databaseId || 'none',
     files: [],
     commands: [],
     createdAt: Date.now()
@@ -521,6 +546,22 @@ ipcMain.handle('ai:chat', async (_e, { chatId, messages, context, libs }) => {
   }
 })
 
+ipcMain.handle('database:list', () => ({
+  providers: database.list(),
+  guide: database.GUIDE
+}))
+ipcMain.handle('database:apply', async (_e, { id, databaseId }) => {
+  const p = projectById(id)
+  if (!p) return { ok: false, error: 'Projet introuvable.' }
+  if (!existsSync(p.path)) return { ok: false, error: 'Dossier introuvable.' }
+  const fw = store.read().frameworks.find((f) => f.id === p.frameworkId)
+  const res = await applyDatabase(id, p.path, fw?.id || p.frameworkId, databaseId)
+  if (res.ok) {
+    patchProject(id, { databaseId: res.databaseId })
+    win.webContents.send('project:changed')
+  }
+  return res
+})
 ipcMain.handle('app:update-status', () => updater.getSnapshot())
 ipcMain.handle('app:update-check', () => updater.check())
 ipcMain.handle('app:update-install', () => updater.install())

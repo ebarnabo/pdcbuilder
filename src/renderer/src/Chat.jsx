@@ -50,7 +50,10 @@ export default function Chat({ state, refresh, toast, onClose, project }) {
     return () => { offDelta(); offDone(); offErr() }
   }, [])
 
-  useEffect(() => { bodyRef.current?.scrollTo({ top: 1e9, behavior: 'smooth' }) }, [messages])
+  useEffect(() => {
+    const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
+    bodyRef.current?.scrollTo({ top: 1e9, behavior })
+  }, [messages])
 
   const send = async () => {
     const text = input.trim()
@@ -65,7 +68,7 @@ export default function Chat({ state, refresh, toast, onClose, project }) {
       `Catégories de librairies : ${state.libraries.map((c) => c.name).join(', ')}`,
       'La documentation officielle des librairies est extraite en local (fichiers .md) et fournie à l’assistant.',
       project
-        ? `Projet actif : ${project.name} (${state.frameworks.find((f) => f.id === project.frameworkId)?.name}) — ${project.path}\nLibrairies : ${project.libs?.join(', ') || 'aucune'}`
+        ? `Projet actif : ${project.name} (${state.frameworks.find((f) => f.id === project.frameworkId)?.name}) — ${project.path}\nLibrairies : ${project.libs?.join(', ') || 'aucune'}\nBase de données : ${project.databaseId && project.databaseId !== 'none' ? project.databaseId : 'aucune'}`
         : 'Aucun projet sélectionné.'
     ].join('\n')
 

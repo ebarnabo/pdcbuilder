@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { RefreshCw, Check, FolderOpen, Download, BookOpen } from 'lucide-react'
 import { Field } from './ui.jsx'
 import { GitFields, GitStatus } from './GitFields.jsx'
+import { DatabasePicker } from './DatabaseFields.jsx'
 import { api } from './bridge.js'
 
 export default function Settings({ state, refresh, toast, update, docsStatus }) {
@@ -13,6 +14,7 @@ export default function Settings({ state, refresh, toast, update, docsStatus }) 
   const [editor, setEditor] = useState(state.editor)
   const [git, setGit] = useState(state.git || {})
   const [gitStatus, setGitStatus] = useState(null)
+  const [databasePref, setDatabasePref] = useState(state.database || { defaultId: 'none' })
 
   useEffect(() => { api.ai.providers().then(setProviders) }, [])
   useEffect(() => { api.git.status().then(setGitStatus) }, [])
@@ -53,7 +55,7 @@ export default function Settings({ state, refresh, toast, update, docsStatus }) 
       <div className="section-head">
         <div style={{ flex: 1 }}>
           <h3>Réglages</h3>
-          <p>Dossier de travail, dépôts Git et moteur d’IA.</p>
+          <p>Dossier de travail, dépôts Git, base de données et moteur d’IA.</p>
         </div>
       </div>
 
@@ -156,6 +158,23 @@ export default function Settings({ state, refresh, toast, update, docsStatus }) 
           onChange={(next) => saveGit(next)}
         />
         <GitStatus status={gitStatus} onRefresh={() => api.git.status().then(setGitStatus)} />
+      </div>
+
+      <div className="card">
+        <h4 className="card-title">Base de données</h4>
+        <p className="card-desc">
+          Prérempli à chaque nouveau projet. Tu peux encore changer dans la modale de création.
+          SQL + auth → Supabase · Postgres seul → Neon · Google/mobile → Firebase ·
+          self-host BaaS → Appwrite · React réactif → Convex · SQLite local → PocketBase.
+        </p>
+        <DatabasePicker
+          value={databasePref.defaultId || 'none'}
+          onChange={(id) => {
+            const next = { defaultId: id }
+            setDatabasePref(next)
+            save({ database: next })
+          }}
+        />
       </div>
 
       <div className="card">

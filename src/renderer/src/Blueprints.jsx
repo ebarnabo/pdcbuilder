@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { Plus, Trash2, Pencil, Bookmark, FileCode2 } from 'lucide-react'
+import { Plus, Trash2, Pencil, Bookmark, FileCode2, Database } from 'lucide-react'
 import { Modal, Field, Empty, LibraryPicker } from './ui.jsx'
+import { DatabasePicker } from './DatabaseFields.jsx'
 import { api } from './bridge.js'
 
 export default function Blueprints({ state, refresh, toast }) {
@@ -15,7 +16,7 @@ export default function Blueprints({ state, refresh, toast }) {
           <p>Des bases réutilisables : un framework, ses librairies, ses fichiers de départ.</p>
         </div>
         <button className="btn primary" onClick={() => setEdit({
-          name: '', description: '', frameworkId: state.frameworks[0]?.id, libs: [], files: [], commands: []
+          name: '', description: '', frameworkId: state.frameworks[0]?.id, libs: [], files: [], commands: [], databaseId: state.database?.defaultId || 'none'
         })}>
           <Plus size={16} /> Nouveau blueprint
         </button>
@@ -40,6 +41,9 @@ export default function Blueprints({ state, refresh, toast }) {
               {b.description && <p className="card-desc">{b.description}</p>}
               <div className="chip-row">
                 <span className="chip">{b.libs?.length || 0} librairies</span>
+                {b.databaseId && b.databaseId !== 'none' && (
+                  <span className="chip"><Database size={12} /> {b.databaseId}</span>
+                )}
                 {b.files?.length > 0 && <span className="chip"><FileCode2 size={12} /> {b.files.length} fichiers</span>}
                 {b.commands?.length > 0 && <span className="chip">{b.commands.length} commandes</span>}
               </div>
@@ -67,7 +71,7 @@ export default function Blueprints({ state, refresh, toast }) {
 }
 
 function BlueprintForm({ value, state, onClose, onSave }) {
-  const [b, setB] = useState({ ...value, files: value.files || [], commands: value.commands || [] })
+  const [b, setB] = useState({ databaseId: 'none', ...value, files: value.files || [], commands: value.commands || [] })
   const [open, setOpen] = useState([state.libraries[0]?.id])
 
   return (
@@ -91,6 +95,8 @@ function BlueprintForm({ value, state, onClose, onSave }) {
         </Field>
       </div>
       <Field label="Description"><textarea className="textarea" value={b.description} onChange={(e) => setB({ ...b, description: e.target.value })} /></Field>
+
+      <DatabasePicker value={b.databaseId || 'none'} onChange={(id) => setB({ ...b, databaseId: id })} />
 
       <Field label="Fichiers de départ" hint="Un chemin relatif par bloc. Écrits juste après l'installation.">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

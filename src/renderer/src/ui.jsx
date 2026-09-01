@@ -1,9 +1,19 @@
-import { useEffect, useRef, useState, useLayoutEffect } from 'react'
+import { useEffect, useRef, useState, useLayoutEffect, useId } from 'react'
+import { createPortal } from 'react-dom'
 import { X, Check, Search } from 'lucide-react'
 
-/* ── modale : fermeture Échap + clic sur le voile, focus piégé ── */
+/* ── modale : portail body, Échap, voile, focus piégé, un seul scroll ── */
 export function Modal({ title, subtitle, onClose, children, footer, width }) {
   const ref = useRef(null)
+  const titleId = useId()
+
+  useEffect(() => {
+    document.documentElement.classList.add('lock-scroll')
+    const root = ref.current
+    const first = root?.querySelector('input, textarea, select, button:not([aria-label="Fermer"])') || root?.querySelector('button')
+    first?.focus()
+    return () => document.documentElement.classList.remove('lock-scroll')
+  }, [])
 
   useEffect(() => {
     const onKey = (e) => {
@@ -20,12 +30,16 @@ export function Modal({ title, subtitle, onClose, children, footer, width }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  return (
-    <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal" ref={ref} style={width ? { width } : undefined} role="dialog" aria-modal="true" aria-label={title}>
+  return createPortal(
+    <div
+      className="overlay"
+      onMouseDown={(e) => e.target === e.currentTarget && onClose()}
+      onWheel={(e) => e.stopPropagation()}
+    >
+      <div className="modal" ref={ref} style={width ? { width } : undefined} role="dialog" aria-modal="true" aria-labelledby={titleId}>
         <div className="modal-head">
-          <div style={{ flex: 1 }}>
-            <h3>{title}</h3>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h3 id={titleId}>{title}</h3>
             {subtitle && <p>{subtitle}</p>}
           </div>
           <button className="btn icon ghost" onClick={onClose} aria-label="Fermer"><X size={18} /></button>
@@ -33,7 +47,8 @@ export function Modal({ title, subtitle, onClose, children, footer, width }) {
         <div className="modal-body">{children}</div>
         {footer && <div className="modal-foot">{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
@@ -65,7 +80,7 @@ export function Menu({ anchor, onClose, children }) {
     }
   }, [anchor, onClose])
 
-  return <div className="menu" ref={ref} style={pos} role="menu">{children}</div>
+  return createPortal(<div className="menu" ref={ref} style={pos} role="menu">{children}</div>, document.body)
 }
 
 /* ── contrôle segmenté avec pouce glissant ── */

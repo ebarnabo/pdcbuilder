@@ -2,10 +2,11 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import {
   Play, Square, Hammer, FolderOpen, Copy, Trash2, Globe, Plus, Package,
   Code2, Layers, MoreHorizontal, FolderInput, Bookmark, Boxes, ExternalLink,
-  Github, CloudUpload, Link2
+  Github, CloudUpload, Link2, Database
 } from 'lucide-react'
 import { Modal, Menu, Field, SearchBox, LibraryPicker, Empty, bytes, ago, shortPath, Segmented } from './ui.jsx'
 import { GitFields, RepoChip } from './GitFields.jsx'
+import { DatabasePicker } from './DatabaseFields.jsx'
 import { api } from './bridge.js'
 
 export default function Projects({ state, refresh, toast, focusProject }) {
@@ -17,6 +18,7 @@ export default function Projects({ state, refresh, toast, focusProject }) {
   const [builds, setBuilds] = useState({})
   const [menu, setMenu] = useState(null)
   const [repo, setRepo] = useState(null)
+  const [db, setDb] = useState(null)
 
   const fwById = useMemo(() => Object.fromEntries(state.frameworks.map((f) => [f.id, f])), [state.frameworks])
 
@@ -68,7 +70,7 @@ export default function Projects({ state, refresh, toast, focusProject }) {
           title={query ? 'Aucun projet ne correspond' : 'Rien à construire pour l’instant'}
           text={query
             ? 'Change le filtre pour retrouver un projet.'
-            : 'Choisis un framework, coche les librairies utiles, et PDC Builder monte le projet pour toi.'}
+            : 'Choisis un framework, une base de données si besoin, coche les librairies utiles, et PDC Builder monte le projet pour toi.'}
           action={!query && <button className="btn primary" onClick={() => setCreating(true)}><Plus size={15} /> Créer un projet</button>}
         />
       ) : (
@@ -98,6 +100,7 @@ export default function Projects({ state, refresh, toast, focusProject }) {
           onDelete={setDel}
           onAddLibs={setAddLibs}
           onRepo={setRepo}
+          onDatabase={setDb}
           act={act}
         />
       )}
@@ -164,6 +167,14 @@ export default function Projects({ state, refresh, toast, focusProject }) {
         />
       )}
 
+      {db && (
+        <DatabaseModal
+          project={db}
+          onClose={() => setDb(null)}
+          act={act}
+        />
+      )}
+
       {del && (
         <Modal
           title={`Supprimer ${del.name} ?`}
@@ -220,6 +231,9 @@ function ProjectCard({ project: p, framework: fw, build, index, onMenu, act, foc
       <div className="chip-row">
         <span className="chip accent">{fw?.name || 'Framework retiré'}</span>
         {p.libs?.length > 0 && <span className="chip"><Package size={11} /> {p.libs.length}</span>}
+        {p.databaseId && p.databaseId !== 'none' && (
+          <span className="chip"><Database size={11} /> {p.databaseId}</span>
+        )}
         {build?.exists && <span className="chip ok">build {bytes(build.size)}</span>}
         <RepoChip repo={p.repo} onOpen={(url) => api.fs.openUrl(url)} />
         {p.exists === false && <span className="chip err">dossier introuvable</span>}
@@ -265,7 +279,7 @@ function ProjectCard({ project: p, framework: fw, build, index, onMenu, act, foc
   )
 }
 
-function ProjectMenu({ project: p, anchor, editor, onClose, onDuplicate, onDelete, onAddLibs, onRepo, act }) {
+function ProjectMenu({ project: p, anchor, editor, onClose, onDuplicate, onDelete, onAddLibs, onRepo, onDatabase, act }) {
   if (!p) return null
   const run = (fn) => { onClose(); fn() }
   return (
@@ -283,6 +297,7 @@ function ProjectMenu({ project: p, anchor, editor, onClose, onDuplicate, onDelet
       )}
       <hr />
       <button onClick={() => run(() => onAddLibs(p))}><Package size={15} /> Ajouter des librairies</button>
+      <button onClick={() => run(() => onDatabase(p))}><Database size={15} /> Configurer la base</button>
       <button onClick={() => run(() => onDuplicate(p))}><Copy size={15} /> Dupliquer</button>
       <button onClick={() => run(() => act(() => api.blueprint.fromProject({ id: p.id, name: `Base ${p.name}` }), 'Blueprint créé'))}>
         <Bookmark size={15} /> En faire un blueprint
@@ -301,6 +316,7 @@ function NewProject({ state, onClose, onDone }) {
   const [frameworkId, setFrameworkId] = useState(state.frameworks[0]?.id || '')
   const [blueprintId, setBlueprintId] = useState('')
   const [libs, setLibs] = useState([])
+  const [databaseId, setDatabaseId] = useState(state.database?.defaultId || 'none')
   const [open, setOpen] = useState(['ui'])
   const [workspace, setWorkspace] = useState(state.workspace)
   const [gitStatus, setGitStatus] = useState(null)
@@ -320,14 +336,19 @@ function NewProject({ state, onClose, onDone }) {
   const applyBlueprint = (id) => {
     setBlueprintId(id)
     const bp = state.blueprints.find((b) => b.id === id)
-    if (bp) { setFrameworkId(bp.frameworkId); setLibs(bp.libs || []) }
+    if (bp) {
+      setFrameworkId(bp.frameworkId)
+      setLibs(bp.libs || [])
+      if (bp.databaseId) setDatabaseId(bp.databaseId)
+    }
   }
 
   return (
     <Modal
       title="Nouveau projet"
-      subtitle="Framework, librairies, dossier et dépôt. Le reste est automatique."
+      subtitle="Framework, base de données, librairies, dossier et dépôt. Le reste est automatique."
       onClose={onClose}
+      width="min(840px, 100%)"
       footer={
         <>
           <button className="btn ghost" onClick={onClose}>Annuler</button>
@@ -336,6 +357,7 @@ function NewProject({ state, onClose, onDone }) {
               name: name.trim(),
               frameworkId,
               libs,
+              databaseId,
               blueprintId: blueprintId || null,
               workspace,
               git: { ...git, name: git.name.trim() || slug }
@@ -362,6 +384,8 @@ function NewProject({ state, onClose, onDone }) {
           {state.frameworks.map((f) => <option key={f.id} value={f.id}>{f.name} · {f.tag}</option>)}
         </select>
       </Field>
+
+      <DatabasePicker value={databaseId} onChange={setDatabaseId} />
 
       <Field label="Dossier parent">
         <div className="row">
@@ -492,6 +516,33 @@ function RepoModal({ project, state, onClose, act }) {
           <input className="input mono" autoFocus placeholder="https://github.com/…" value={url} onChange={(e) => setUrl(e.target.value)} />
         </Field>
       )}
+    </Modal>
+  )
+}
+
+function DatabaseModal({ project, onClose, act }) {
+  const [databaseId, setDatabaseId] = useState(project.databaseId || 'none')
+  return (
+    <Modal
+      title={`Base de données · ${project.name}`}
+      subtitle="Génère le client, .env.example et .pdc/database.md, puis installe le SDK."
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn ghost" onClick={onClose}>Annuler</button>
+          <button className="btn primary" onClick={async () => {
+            onClose()
+            await act(
+              () => api.database.apply({ id: project.id, databaseId }),
+              databaseId === 'none' ? 'Aucune base configurée' : `Base ${databaseId} configurée`
+            )
+          }}>
+            <Database size={15} /> Appliquer
+          </button>
+        </>
+      }
+    >
+      <DatabasePicker value={databaseId} onChange={setDatabaseId} />
     </Modal>
   )
 }
