@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { flushSync } from 'react-dom'
-import { Boxes, Bookmark, Layers, Settings as Cog, Sparkles, Terminal, Trash2 } from 'lucide-react'
+import { Boxes, Bookmark, Layers, Settings as Cog, Sparkles, Terminal, Trash2, Download } from 'lucide-react'
 import Projects from './Projects.jsx'
 import Catalog from './Catalog.jsx'
 import Blueprints from './Blueprints.jsx'
@@ -32,6 +32,8 @@ export default function App() {
   const [stuck, setStuck] = useState(false)
   const [dragging, setDragging] = useState(false)
   const [bootError, setBootError] = useState(null)
+  const [update, setUpdate] = useState(null)
+  const [docsStatus, setDocsStatus] = useState(null)
   const logRef = useRef(null)
   const lastH = useRef(300)
 
@@ -46,6 +48,24 @@ export default function App() {
       .then(() => refresh())
       .catch((err) => setBootError(err.message))
   }, [refresh])
+
+  useEffect(() => {
+    let off = () => {}
+    waitForApi().then(() => {
+      api.app.updateStatus().then(setUpdate)
+      off = api.on('app:update', setUpdate)
+    }).catch(() => {})
+    return () => off()
+  }, [])
+
+  useEffect(() => {
+    let off = () => {}
+    waitForApi().then(() => {
+      api.docs.status().then(setDocsStatus)
+      off = api.on('docs:status', setDocsStatus)
+    }).catch(() => {})
+    return () => off()
+  }, [])
 
   useEffect(() => {
     let unsub = () => {}
@@ -198,6 +218,22 @@ export default function App() {
           {active && <span className="chip accent">Actif · {active.name}</span>}
         </header>
 
+        {update && (update.status === 'ready' || update.status === 'downloading') && (
+          <div className="update-bar">
+            {update.status === 'downloading' ? (
+              <span>Téléchargement de la {update.version || 'mise à jour'}… {Math.round(update.percent || 0)} %</span>
+            ) : (
+              <span>PDC Builder {update.version} est prêt.</span>
+            )}
+            <div className="spacer" />
+            {update.status === 'ready' && (
+              <button className="btn sm primary" onClick={() => api.app.installUpdate()}>
+                <Download size={14} /> Mettre à jour
+              </button>
+            )}
+          </div>
+        )}
+
         <div
           className="content"
           onScroll={(e) => setStuck(e.currentTarget.scrollTop > 8)}
@@ -209,8 +245,8 @@ export default function App() {
                 focusProject={(id) => { setActiveId(id); setConsoleH((h) => (h === 0 ? lastH.current : h)) }} />
             )}
             {view === 'blueprints' && <Blueprints state={state} refresh={refresh} toast={notify} />}
-            {view === 'catalog' && <Catalog state={state} refresh={refresh} toast={notify} tab={catalogTab} setTab={setCatalogTab} />}
-            {view === 'settings' && <Settings state={state} refresh={refresh} toast={notify} />}
+            {view === 'catalog' && <Catalog state={state} refresh={refresh} toast={notify} tab={catalogTab} setTab={setCatalogTab} docsStatus={docsStatus} />}
+            {view === 'settings' && <Settings state={state} refresh={refresh} toast={notify} update={update} docsStatus={docsStatus} />}
           </div>
         </div>
 

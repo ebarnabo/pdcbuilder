@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Plus, Trash2, Pencil, RotateCcw, Package, Terminal } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Plus, Trash2, Pencil, RotateCcw, Package, Terminal, BookOpen } from 'lucide-react'
 import { Modal, Field, Segmented } from './ui.jsx'
 import { api } from './bridge.js'
 const blankFw = {
@@ -9,9 +9,14 @@ const blankFw = {
   preview: 'npm run preview', outDir: 'dist'
 }
 
-export default function Catalog({ state, refresh, toast, tab, setTab }) {
+export default function Catalog({ state, refresh, toast, tab, setTab, docsStatus }) {
   const [editFw, setEditFw] = useState(null)
   const [editLib, setEditLib] = useState(null)
+  const [docsIndex, setDocsIndex] = useState([])
+
+  useEffect(() => {
+    api.docs.index().then((r) => setDocsIndex(r?.packages || [])).catch(() => {})
+  }, [docsStatus?.done, docsStatus?.status, docsStatus?.lastRun])
 
   const saveFw = async (fw) => {
     const id = fw.id || fw.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')
@@ -28,7 +33,7 @@ export default function Catalog({ state, refresh, toast, tab, setTab }) {
     refresh(); toast('Framework retiré du catalogue')
   }
 
-  const saveLib = async ({ category, name, pkg, description, dev, newCategory }) => {
+  const saveLib = async ({ category, name, pkg, description, dev, docs, newCategory }) => {
     const catId = newCategory ? newCategory.toLowerCase().replace(/[^a-z0-9]+/g, '-') : category
     let libs = state.libraries
     if (!libs.some((c) => c.id === catId)) {
@@ -36,7 +41,7 @@ export default function Catalog({ state, refresh, toast, tab, setTab }) {
     }
     libs = libs.map((c) =>
       c.id === catId
-        ? { ...c, items: [...c.items.filter((i) => i.pkg !== pkg), { id: pkg, name, pkg, description, dev: !!dev }] }
+        ? { ...c, items: [...c.items.filter((i) => i.pkg !== pkg), { id: pkg, name, pkg, description, dev: !!dev, docs: docs || '' }] }
         : c
     )
     await api.state.patch({ libraries: libs })
@@ -54,7 +59,12 @@ export default function Catalog({ state, refresh, toast, tab, setTab }) {
       <div className="section-head">
         <div style={{ flex: 1 }}>
           <h3>Catalogue</h3>
-          <p>Les briques disponibles au moment de créer un projet.</p>
+          <p>
+            Les briques disponibles au moment de créer un projet.
+            {tab === 'libraries' && docsStatus?.total > 0 && (
+              <> · docs {docsStatus.done}/{docsStatus.total}{docsStatus.status === 'running' ? ' (fond)' : ''}</>
+            )}
+          </p>
         </div>
         <Segmented
           value={tab}
@@ -105,7 +115,10 @@ export default function Catalog({ state, refresh, toast, tab, setTab }) {
                 <button className="btn sm ghost" onClick={() => setEditLib({ category: c.id })}><Plus size={14} /> Ajouter ici</button>
               </div>
               <div className="lib-body">
-                {c.items.map((i) => (
+                {c.items.map((i) => {
+                  const doc = docsIndex.find((d) => d.pkg === i.pkg)
+                  const url = i.docs || doc?.docsUrl
+                  return (
                   <div className="lib" key={i.pkg}>
                     <Package size={16} color="var(--faint)" style={{ marginTop: 2, flex: 'none' }} />
                     <span style={{ flex: 1 }}>
@@ -113,9 +126,15 @@ export default function Catalog({ state, refresh, toast, tab, setTab }) {
                       <small>{i.description}</small>
                       <small className="mono" style={{ color: 'var(--accent)', marginTop: 4 }}>{i.pkg}</small>
                     </span>
+                    {url && (
+                      <button className="btn icon sm ghost" aria-label="Documentation" onClick={() => api.fs.openUrl(url)}>
+                        <BookOpen size={14} />
+                      </button>
+                    )}
                     <button className="btn icon sm ghost" aria-label="Retirer" onClick={() => removeLib(c.id, i.pkg)}><Trash2 size={14} /></button>
                   </div>
-                ))}
+                  )
+                })}
                 {c.items.length === 0 && <p className="card-desc">Catégorie vide.</p>}
               </div>
             </div>
@@ -168,7 +187,7 @@ function FrameworkForm({ value, onClose, onSave }) {
 }
 
 function LibraryForm({ value, categories, onClose, onSave }) {
-  const [l, setL] = useState({ name: '', pkg: '', description: '', dev: false, newCategory: '', ...value })
+  const [l, setL] = useState({ name: '', pkg: '', description: '', dev: false, docs: '', newCategory: '', ...value })
   const set = (k) => (e) => setL({ ...l, [k]: e.target.value })
   return (
     <Modal
@@ -195,6 +214,9 @@ function LibraryForm({ value, categories, onClose, onSave }) {
         <Field label="Paquet npm"><input className="input mono" value={l.pkg} onChange={set('pkg')} placeholder="tone" /></Field>
       </div>
       <Field label="Description"><textarea className="textarea" value={l.description} onChange={set('description')} /></Field>
+      <Field label="Documentation (facultatif)" hint="Sinon l’app récupère homepage et README depuis npm, en silence au démarrage.">
+        <input className="input mono" value={l.docs || ''} onChange={set('docs')} placeholder="https://…" />
+      </Field>
       <label className="lib" style={{ cursor: 'pointer' }}>
         <input type="checkbox" checked={l.dev} onChange={(e) => setL({ ...l, dev: e.target.checked })} style={{ accentColor: 'var(--accent)', width: 18, height: 18 }} />
         <span><strong>Dépendance de développement</strong><small>Installée avec <code>npm install -D</code>.</small></span>

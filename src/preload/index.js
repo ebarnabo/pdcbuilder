@@ -56,6 +56,18 @@ const api = {
     push: invoke('git:push'),
     link: invoke('git:link')
   },
+  app: {
+    updateStatus: invoke('app:update-status'),
+    checkUpdate: invoke('app:update-check'),
+    installUpdate: invoke('app:update-install')
+  },
+  docs: {
+    status: invoke('docs:status'),
+    index: invoke('docs:index'),
+    get: invoke('docs:get'),
+    refresh: invoke('docs:refresh'),
+    open: invoke('docs:open')
+  },
 
   on: (channel, handler) => {
     const listener = (_e, payload) => handler(payload)

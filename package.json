@@ -5,13 +5,19 @@
   "main": "./out/main/index.js",
   "author": "PDC Design",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ebarnabo/pdcbuilder.git"
+  },
   "scripts": {
     "dev": "electron-vite dev",
     "start": "electron-vite preview",
     "build": "electron-vite build",
-    "pack:mac": "npm run build && electron-builder --mac",
-    "pack:win": "npm run build && electron-builder --win",
-    "pack:all": "npm run build && electron-builder -mw"
+    "pack:mac": "electron-vite build && electron-builder --mac --publish never",
+    "pack:win": "electron-vite build && electron-builder --win --publish never",
+    "pack:all": "electron-vite build && electron-builder -mw --publish never",
+    "release:win": "electron-vite build && electron-builder --win --publish always",
+    "release:mac": "electron-vite build && electron-builder --mac --publish always"
   },
   "dependencies": {
     "electron-updater": "^6.3.9"
@@ -31,6 +37,12 @@
     "productName": "PDC Builder",
     "directories": { "output": "release" },
     "files": ["out/**/*", "resources/**/*"],
+    "publish": {
+      "provider": "github",
+      "owner": "ebarnabo",
+      "repo": "pdcbuilder",
+      "releaseType": "release"
+    },
     "mac": {
       "category": "public.app-category.developer-tools",
       "target": ["dmg", "zip"],
@@ -38,9 +50,16 @@
     },
     "win": {
       "target": ["nsis", "portable"],
+      "verifyUpdateCodeSignature": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
       "artifactName": "PDC-Builder-${version}-setup.${ext}"
     },
-    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true }
+    "portable": {
+      "artifactName": "PDC-Builder-${version}-portable.${ext}"
+    }
   },
   "pnpm": {
     "onlyBuiltDependencies": ["electron", "esbuild"]

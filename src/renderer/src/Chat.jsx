@@ -63,12 +63,13 @@ export default function Chat({ state, refresh, toast, onClose, project }) {
     const context = [
       `Frameworks du catalogue : ${state.frameworks.map((f) => f.id).join(', ')}`,
       `Catégories de librairies : ${state.libraries.map((c) => c.name).join(', ')}`,
+      'La documentation officielle des librairies est extraite en local (fichiers .md) et fournie à l’assistant.',
       project
         ? `Projet actif : ${project.name} (${state.frameworks.find((f) => f.id === project.frameworkId)?.name}) — ${project.path}\nLibrairies : ${project.libs?.join(', ') || 'aucune'}`
         : 'Aucun projet sélectionné.'
     ].join('\n')
 
-    await api.ai.chat({ chatId: chatId.current, messages: history, context })
+    await api.ai.chat({ chatId: chatId.current, messages: history, context, libs: project?.libs || [] })
   }
 
   const writeFile = async (path, content) => {
@@ -92,7 +93,7 @@ export default function Chat({ state, refresh, toast, onClose, project }) {
         let libs = state.libraries
         if (!libs.some((c) => c.id === catId)) libs = [...libs, { id: catId, name: data.category, description: '', items: [] }]
         libs = libs.map((c) => c.id === catId
-          ? { ...c, items: [...c.items.filter((i) => i.pkg !== data.pkg), { id: data.pkg, name: data.name, pkg: data.pkg, description: data.description, dev: !!data.dev }] }
+          ? { ...c, items: [...c.items.filter((i) => i.pkg !== data.pkg), { id: data.pkg, name: data.name, pkg: data.pkg, description: data.description, dev: !!data.dev, docs: data.docs || '' }] }
           : c)
         await api.state.patch({ libraries: libs })
         toast(`Librairie ${data.name} ajoutée`)

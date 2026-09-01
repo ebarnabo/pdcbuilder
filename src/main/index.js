@@ -7,6 +7,8 @@ import * as store from './store.js'
 import * as runner from './runner.js'
 import * as ai from './ai.js'
 import * as git from './git.js'
+import * as updater from './updater.js'
+import * as docs from './docs.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const isMac = platform() === 'darwin'
@@ -79,12 +81,23 @@ function createWindow() {
   } else {
     win.loadFile(join(__dirname, '../renderer/index.html'))
   }
+  updater.attach(win)
 }
 
 nativeTheme.themeSource = 'dark'
 
 app.whenReady().then(() => {
+  if (!isMac) app.setAppUserModelId('com.pdcdesign.builder')
   createWindow()
+  updater.attach(win)
+  updater.start()
+  docs.start({
+    getLibraries: () => store.read().libraries,
+    getProjects: () => store.read().projects,
+    onStatus: (snap) => {
+      if (win && !win.isDestroyed()) win.webContents.send('docs:status', snap)
+    }
+  })
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
 })
 app.on('window-all-closed', () => { runner.stopAll(); if (!isMac) app.quit() })
@@ -99,7 +112,17 @@ ipcMain.handle('state:get', () => {
     projects: s.projects.map((p) => ({ ...p, exists: existsSync(p.path), ...runner.devState(p.id) }))
   }
 })
-ipcMain.handle('state:patch', (_e, fields) => store.patch(fields))
+ipcMain.handle('state:patch', (_e, fields) => {
+  const before = new Set(store.read().libraries.flatMap((c) => (c.items || []).map((i) => i.pkg)))
+  const next = store.patch(fields)
+  if (fields.libraries) {
+    const indexed = new Set((docs.listIndex().packages || []).map((p) => p.pkg))
+    for (const pkg of next.libraries.flatMap((c) => (c.items || []).map((i) => i.pkg))) {
+      if (!before.has(pkg) || !indexed.has(pkg)) docs.enqueue(pkg)
+    }
+  }
+  return next
+})
 ipcMain.handle('state:reset-catalog', () => store.patch({
   frameworks: store.DEFAULT_FRAMEWORKS,
   libraries: store.DEFAULT_LIBRARIES
@@ -225,6 +248,7 @@ ipcMain.handle('project:create', async (_e, payload) => {
     } : p))
   })
   win.webContents.send('project:changed')
+  docs.syncAllProjects()
   return { ok: res.ok, id, path, repo, gitError }
 })
 
@@ -309,6 +333,7 @@ ipcMain.handle('project:add-libs', async (_e, { id, libs }) => {
     store.patch({
       projects: s2.projects.map((x) => (x.id === id ? { ...x, libs: [...new Set([...x.libs, ...libs])] } : x))
     })
+    docs.syncAllProjects()
   }
   return res
 })
@@ -460,19 +485,25 @@ ipcMain.handle('ai:providers', () => ai.PROVIDERS)
 ipcMain.handle('ai:models', (_e, cfg) => ai.listModels(cfg).catch((e) => ({ error: e.message })))
 ipcMain.handle('ai:stop', (_e, chatId) => { controllers.get(chatId)?.abort(); return { ok: true } })
 
-ipcMain.handle('ai:chat', async (_e, { chatId, messages, context }) => {
+ipcMain.handle('ai:chat', async (_e, { chatId, messages, context, libs }) => {
   const s = store.read()
   const ctrl = new AbortController()
   controllers.set(chatId, ctrl)
+  const lastUser = [...(messages || [])].reverse().find((m) => m.role === 'user')
+  const docContext = docs.forPrompt({
+    query: lastUser?.content || '',
+    projectLibs: libs || []
+  })
 
   const system = [
     "Tu es l'assistant intégré de PDC Builder, un atelier de projets web sur Mac et Windows.",
     "Réponses courtes, techniques, en français. Pas de préambule.",
     'Pour proposer un fichier, ouvre un bloc de code avec le chemin relatif : ```tsx path=src/App.tsx',
     'Pour proposer un framework à ajouter au catalogue : ```pdc-framework puis un JSON {id,name,tag,description,create,install,dev,build,preview,outDir}.',
-    'Pour proposer une librairie : ```pdc-library puis {category,name,pkg,description,dev}.',
+    'Pour proposer une librairie : ```pdc-library puis {category,name,pkg,description,dev,docs}.',
     'Design : dark chaud, rayons 16–36px, grille de 8px, Inter, animations 60 fps.',
-    context ? `Contexte:\n${context}` : ''
+    context ? `Contexte:\n${context}` : '',
+    docContext
   ].join('\n')
 
   try {
@@ -489,3 +520,13 @@ ipcMain.handle('ai:chat', async (_e, { chatId, messages, context }) => {
     controllers.delete(chatId)
   }
 })
+
+ipcMain.handle('app:update-status', () => updater.getSnapshot())
+ipcMain.handle('app:update-check', () => updater.check())
+ipcMain.handle('app:update-install', () => updater.install())
+
+ipcMain.handle('docs:status', () => docs.getSnapshot())
+ipcMain.handle('docs:index', () => docs.listIndex())
+ipcMain.handle('docs:get', (_e, pkg) => docs.readDoc(pkg))
+ipcMain.handle('docs:refresh', () => docs.refresh({ force: true }))
+ipcMain.handle('docs:open', () => docs.openFolder())
