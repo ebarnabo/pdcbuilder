@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { RefreshCw, Check, FolderOpen } from 'lucide-react'
 import { Field } from './ui.jsx'
-
-const api = window.pdc
+import { GitFields, GitStatus } from './GitFields.jsx'
+import { api } from './bridge.js'
 
 export default function Settings({ state, refresh, toast }) {
   const [providers, setProviders] = useState({})
@@ -11,10 +11,25 @@ export default function Settings({ state, refresh, toast }) {
   const [ai, setAi] = useState(state.ai)
   const [workspace, setWorkspace] = useState(state.workspace)
   const [editor, setEditor] = useState(state.editor)
+  const [git, setGit] = useState(state.git || {})
+  const [gitStatus, setGitStatus] = useState(null)
 
   useEffect(() => { api.ai.providers().then(setProviders) }, [])
+  useEffect(() => { api.git.status().then(setGitStatus) }, [])
 
   const save = async (fields) => { await api.state.patch(fields); refresh() }
+  const saveGit = (next) => {
+    const merged = {
+      autoCreate: true,
+      provider: 'github',
+      visibility: 'private',
+      org: '',
+      branch: 'main',
+      ...next
+    }
+    setGit(merged)
+    save({ git: merged })
+  }
 
   const pickProvider = (id) => {
     const next = { ...ai, provider: id, baseUrl: providers[id]?.baseUrl || ai.baseUrl }
@@ -38,7 +53,7 @@ export default function Settings({ state, refresh, toast }) {
       <div className="section-head">
         <div style={{ flex: 1 }}>
           <h3>Réglages</h3>
-          <p>Dossier de travail, éditeur et moteur d’IA.</p>
+          <p>Dossier de travail, dépôts Git et moteur d’IA.</p>
         </div>
       </div>
 
@@ -54,6 +69,21 @@ export default function Settings({ state, refresh, toast }) {
         <Field label="Commande de l’éditeur" hint="« code » pour VS Code, « cursor » pour Cursor, « subl » pour Sublime.">
           <input className="input mono" value={editor} onChange={(e) => setEditor(e.target.value)} onBlur={() => save({ editor })} />
         </Field>
+      </div>
+
+      <div className="card">
+        <h4 className="card-title">Dépôts Git</h4>
+        <p className="card-desc">
+          Un dépôt GitHub (ou Cursor Origin) peut être créé en même temps que le projet.
+          Ces options sont mémorisées et préremplies à chaque création.
+        </p>
+        <GitFields
+          value={git}
+          status={gitStatus}
+          showAuto
+          onChange={(next) => saveGit(next)}
+        />
+        <GitStatus status={gitStatus} onRefresh={() => api.git.status().then(setGitStatus)} />
       </div>
 
       <div className="card">

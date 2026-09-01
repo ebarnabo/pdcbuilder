@@ -25,14 +25,19 @@ export function exec(win, projectId, command, cwd, label = '') {
     const child = spawn(command, {
       cwd,
       shell: true,
-      env: { ...process.env, FORCE_COLOR: '0', CI: '1', ADBLOCK: '1' },
+      env: { ...process.env, FORCE_COLOR: '0', CI: '1', ADBLOCK: '1', GH_PROMPT_DISABLED: '1' },
       detached: !isWin
     })
 
+    let stdout = ''
+    let stderr = ''
     const pipe = (stream, kind) => {
       let buffer = ''
       stream.on('data', (chunk) => {
-        buffer += chunk.toString()
+        const text = chunk.toString()
+        if (kind === 'out') stdout += text
+        else stderr += text
+        buffer += text
         const lines = buffer.split(/\r?\n/)
         buffer = lines.pop() ?? ''
         lines.filter(Boolean).forEach((l) => log(win, projectId, l, kind))
@@ -44,11 +49,11 @@ export function exec(win, projectId, command, cwd, label = '') {
 
     child.on('error', (e) => {
       log(win, projectId, e.message, 'err')
-      resolve({ ok: false, code: -1 })
+      resolve({ ok: false, code: -1, stdout, stderr: e.message })
     })
     child.on('close', (code) => {
       log(win, projectId, code === 0 ? '✓ terminé' : `✕ code ${code}`, code === 0 ? 'ok' : 'err')
-      resolve({ ok: code === 0, code })
+      resolve({ ok: code === 0, code, stdout, stderr })
     })
   })
 }

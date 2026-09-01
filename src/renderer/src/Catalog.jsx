@@ -1,8 +1,7 @@
 import { useState } from 'react'
 import { Plus, Trash2, Pencil, RotateCcw, Package, Terminal } from 'lucide-react'
 import { Modal, Field, Segmented } from './ui.jsx'
-
-const api = window.pdc
+import { api } from './bridge.js'
 const blankFw = {
   id: '', name: '', tag: '', description: '',
   create: 'npm create vite@latest {{name}} -- --template vanilla',

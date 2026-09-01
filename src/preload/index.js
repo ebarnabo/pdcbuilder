@@ -50,6 +50,12 @@ const api = {
     stop: invoke('ai:stop')
   },
   editor: { open: invoke('app:open-editor') },
+  git: {
+    status: invoke('git:status'),
+    publish: invoke('git:publish'),
+    push: invoke('git:push'),
+    link: invoke('git:link')
+  },
 
   on: (channel, handler) => {
     const listener = (_e, payload) => handler(payload)

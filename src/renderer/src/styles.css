@@ -280,7 +280,16 @@ a { color: var(--accent); text-decoration: none; }
 .chip.accent { background: var(--accent-wash); color: var(--accent); box-shadow: inset 0 0 0 1px rgba(240, 163, 94, 0.18); }
 .chip.ok { background: rgba(116, 198, 141, 0.12); color: var(--ok); box-shadow: inset 0 0 0 1px rgba(116, 198, 141, 0.18); }
 .chip.err { background: rgba(255, 111, 96, 0.12); color: var(--err); box-shadow: inset 0 0 0 1px rgba(255, 111, 96, 0.2); }
-.chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip.link { cursor: pointer; }
+.chip.link:hover { color: var(--text); background: rgba(255, 236, 214, 0.1); }
+
+.git-status { display: flex; flex-direction: column; gap: 8px; padding-top: 4px; }
+.git-status-row {
+  display: grid; grid-template-columns: 10px 120px 1fr; align-items: center; gap: 10px;
+  font-size: 13px; color: var(--text-2);
+}
+.git-status-row strong { font-size: 12.5px; font-weight: 600; color: var(--text); }
+.git-status .btn { align-self: flex-start; margin-top: 4px; }
 
 .status { display: flex; align-items: center; gap: 9px; font-size: 13px; font-weight: 500; color: var(--text-2); min-height: 20px; }
 .pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--text-3); flex: none; transition: background 0.3s; }

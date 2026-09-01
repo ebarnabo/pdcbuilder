@@ -187,6 +187,13 @@ export const DEFAULTS = {
     model: 'qwen2.5-coder:7b',
     apiKey: '',
     temperature: 0.4
+  },
+  git: {
+    autoCreate: true,
+    provider: 'github',
+    visibility: 'private',
+    org: '',
+    branch: 'main'
   }
 }
 
@@ -196,7 +203,13 @@ export function read() {
   if (cache) return cache
   try {
     if (existsSync(FILE())) {
-      cache = { ...DEFAULTS, ...JSON.parse(readFileSync(FILE(), 'utf8')) }
+      const parsed = JSON.parse(readFileSync(FILE(), 'utf8'))
+      cache = {
+        ...DEFAULTS,
+        ...parsed,
+        ai: { ...DEFAULTS.ai, ...(parsed.ai || {}) },
+        git: { ...DEFAULTS.git, ...(parsed.git || {}) }
+      }
     } else {
       cache = structuredClone(DEFAULTS)
       write(cache)

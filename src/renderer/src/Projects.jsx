@@ -1,11 +1,12 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import {
   Play, Square, Hammer, FolderOpen, Copy, Trash2, Globe, Plus, Package,
-  Code2, Layers, MoreHorizontal, FolderInput, Bookmark, Boxes, ExternalLink
+  Code2, Layers, MoreHorizontal, FolderInput, Bookmark, Boxes, ExternalLink,
+  Github, CloudUpload, Link2
 } from 'lucide-react'
-import { Modal, Menu, Field, SearchBox, LibraryPicker, Empty, bytes, ago, shortPath } from './ui.jsx'
-
-const api = window.pdc
+import { Modal, Menu, Field, SearchBox, LibraryPicker, Empty, bytes, ago, shortPath, Segmented } from './ui.jsx'
+import { GitFields, RepoChip } from './GitFields.jsx'
+import { api } from './bridge.js'
 
 export default function Projects({ state, refresh, toast, focusProject }) {
   const [query, setQuery] = useState('')
@@ -15,6 +16,7 @@ export default function Projects({ state, refresh, toast, focusProject }) {
   const [addLibs, setAddLibs] = useState(null)
   const [builds, setBuilds] = useState({})
   const [menu, setMenu] = useState(null)
+  const [repo, setRepo] = useState(null)
 
   const fwById = useMemo(() => Object.fromEntries(state.frameworks.map((f) => [f.id, f])), [state.frameworks])
 
@@ -95,6 +97,7 @@ export default function Projects({ state, refresh, toast, focusProject }) {
           onDuplicate={(p) => setDup({ project: p, name: `${p.name} copie` })}
           onDelete={setDel}
           onAddLibs={setAddLibs}
+          onRepo={setRepo}
           act={act}
         />
       )}
@@ -107,7 +110,9 @@ export default function Projects({ state, refresh, toast, focusProject }) {
             setCreating(false)
             focusProject(null)
             const r = await api.project.create(payload)
-            toast(r.ok ? `${payload.name} est prêt` : r.error || 'Création interrompue', !r.ok)
+            if (!r.ok) toast(r.error || 'Création interrompue', true)
+            else if (r.gitError) toast(`${payload.name} est prêt, mais le dépôt a échoué : ${r.gitError}`, true)
+            else toast(r.repo?.url ? `${payload.name} est prêt · dépôt créé` : `${payload.name} est prêt`)
             refresh()
           }}
         />
@@ -147,6 +152,15 @@ export default function Projects({ state, refresh, toast, focusProject }) {
             focusProject(p.id)
             await act(() => api.project.addLibs({ id: p.id, libs }), 'Librairies installées')
           }}
+        />
+      )}
+
+      {repo && (
+        <RepoModal
+          project={repo}
+          state={state}
+          onClose={() => setRepo(null)}
+          act={act}
         />
       )}
 
@@ -207,6 +221,7 @@ function ProjectCard({ project: p, framework: fw, build, index, onMenu, act, foc
         <span className="chip accent">{fw?.name || 'Framework retiré'}</span>
         {p.libs?.length > 0 && <span className="chip"><Package size={11} /> {p.libs.length}</span>}
         {build?.exists && <span className="chip ok">build {bytes(build.size)}</span>}
+        <RepoChip repo={p.repo} onOpen={(url) => api.fs.openUrl(url)} />
         {p.exists === false && <span className="chip err">dossier introuvable</span>}
       </div>
 
@@ -250,13 +265,22 @@ function ProjectCard({ project: p, framework: fw, build, index, onMenu, act, foc
   )
 }
 
-function ProjectMenu({ project: p, anchor, editor, onClose, onDuplicate, onDelete, onAddLibs, act }) {
+function ProjectMenu({ project: p, anchor, editor, onClose, onDuplicate, onDelete, onAddLibs, onRepo, act }) {
   if (!p) return null
   const run = (fn) => { onClose(); fn() }
   return (
     <Menu anchor={anchor} onClose={onClose}>
       <button onClick={() => run(() => api.editor.open({ path: p.path, editor }))}><Code2 size={15} /> Ouvrir dans l’éditeur</button>
       <button onClick={() => run(() => api.fs.reveal(p.path))}><FolderOpen size={15} /> Révéler le dossier</button>
+      <hr />
+      {p.repo?.url ? (
+        <>
+          <button onClick={() => run(() => api.fs.openUrl(p.repo.url))}><Github size={15} /> Ouvrir le dépôt</button>
+          <button onClick={() => run(() => act(() => api.git.push(p.id), 'Push envoyé'))}><CloudUpload size={15} /> Pousser les changements</button>
+        </>
+      ) : (
+        <button onClick={() => run(() => onRepo(p))}><Link2 size={15} /> Lier ou créer un dépôt</button>
+      )}
       <hr />
       <button onClick={() => run(() => onAddLibs(p))}><Package size={15} /> Ajouter des librairies</button>
       <button onClick={() => run(() => onDuplicate(p))}><Copy size={15} /> Dupliquer</button>
@@ -272,12 +296,23 @@ function ProjectMenu({ project: p, anchor, editor, onClose, onDuplicate, onDelet
 /* ─────────────────────  création de projet  ───────────────────── */
 
 function NewProject({ state, onClose, onDone }) {
+  const saved = state.git || {}
   const [name, setName] = useState('')
   const [frameworkId, setFrameworkId] = useState(state.frameworks[0]?.id || '')
   const [blueprintId, setBlueprintId] = useState('')
   const [libs, setLibs] = useState([])
   const [open, setOpen] = useState(['ui'])
   const [workspace, setWorkspace] = useState(state.workspace)
+  const [gitStatus, setGitStatus] = useState(null)
+  const [git, setGit] = useState({
+    create: saved.autoCreate !== false,
+    provider: saved.provider || 'github',
+    visibility: saved.visibility || 'private',
+    org: saved.org || '',
+    name: ''
+  })
+
+  useEffect(() => { api.git.status().then(setGitStatus) }, [])
 
   const fw = state.frameworks.find((f) => f.id === frameworkId)
   const slug = name.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
@@ -291,13 +326,20 @@ function NewProject({ state, onClose, onDone }) {
   return (
     <Modal
       title="Nouveau projet"
-      subtitle="Framework, librairies et dossier. Le reste est automatique."
+      subtitle="Framework, librairies, dossier et dépôt. Le reste est automatique."
       onClose={onClose}
       footer={
         <>
           <button className="btn ghost" onClick={onClose}>Annuler</button>
           <button className="btn primary" disabled={!slug || !frameworkId}
-            onClick={() => onDone({ name: name.trim(), frameworkId, libs, blueprintId: blueprintId || null, workspace })}>
+            onClick={() => onDone({
+              name: name.trim(),
+              frameworkId,
+              libs,
+              blueprintId: blueprintId || null,
+              workspace,
+              git: { ...git, name: git.name.trim() || slug }
+            })}>
             <Layers size={15} /> Créer le projet
           </button>
         </>
@@ -327,6 +369,25 @@ function NewProject({ state, onClose, onDone }) {
           <button className="btn none" onClick={async () => { const d = await api.fs.pickDir(); if (d) setWorkspace(d) }}>Choisir</button>
         </div>
       </Field>
+
+      <Field label="Dépôt distant" hint="Prérempli depuis Réglages. Change-le seulement pour ce projet.">
+        <Segmented
+          value={git.create ? 'yes' : 'no'}
+          onChange={(v) => setGit({ ...git, create: v === 'yes' })}
+          options={[
+            { value: 'yes', label: 'Créer un dépôt' },
+            { value: 'no', label: 'Pas maintenant' }
+          ]}
+        />
+      </Field>
+      {git.create && (
+        <>
+          <GitFields value={git} onChange={setGit} status={gitStatus} />
+          <Field label="Nom du dépôt" hint={slug ? `Par défaut : ${slug}` : 'Reprend le nom du dossier.'}>
+            <input className="input mono" placeholder={slug || 'mon-projet'} value={git.name} onChange={(e) => setGit({ ...git, name: e.target.value })} />
+          </Field>
+        </>
+      )}
 
       <Field label={libs.length ? `Librairies · ${libs.length} sélectionnées` : 'Librairies'}>
         <LibraryPicker
@@ -369,6 +430,68 @@ function AddLibs({ project, state, onClose, onDone }) {
         onToggleGroup={(id) => setOpen((o) => (o.includes(id) ? o.filter((x) => x !== id) : [...o, id]))}
         onToggle={(pkg) => setLibs((l) => (l.includes(pkg) ? l.filter((x) => x !== pkg) : [...l, pkg]))}
       />
+    </Modal>
+  )
+}
+
+function RepoModal({ project, state, onClose, act }) {
+  const saved = state.git || {}
+  const [mode, setMode] = useState('create')
+  const [url, setUrl] = useState('')
+  const [gitStatus, setGitStatus] = useState(null)
+  const [git, setGit] = useState({
+    provider: saved.provider || 'github',
+    visibility: saved.visibility || 'private',
+    org: saved.org || '',
+    name: project.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+  })
+
+  useEffect(() => { api.git.status().then(setGitStatus) }, [])
+
+  return (
+    <Modal
+      title={`Dépôt · ${project.name}`}
+      subtitle="Créer un dépôt distant avec tes réglages, ou coller l’URL d’un dépôt existant."
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn ghost" onClick={onClose}>Annuler</button>
+          {mode === 'link' ? (
+            <button className="btn primary" disabled={!url.trim()} onClick={async () => {
+              onClose()
+              await act(() => api.git.link({ id: project.id, url: url.trim() }), 'Dépôt lié')
+            }}><Link2 size={15} /> Lier</button>
+          ) : (
+            <button className="btn primary" disabled={!git.name.trim()} onClick={async () => {
+              onClose()
+              await act(() => api.git.publish({ id: project.id, options: git }), 'Dépôt créé')
+            }}><Github size={15} /> Créer le dépôt</button>
+          )}
+        </>
+      }
+    >
+      <Field label="Action">
+        <Segmented
+          value={mode}
+          onChange={setMode}
+          options={[
+            { value: 'create', label: 'Créer' },
+            { value: 'link', label: 'Lier un existant' }
+          ]}
+        />
+      </Field>
+      {mode === 'create' ? (
+        <>
+          <GitFields value={git} onChange={setGit} status={gitStatus} />
+          <Field label="Nom du dépôt">
+            <input className="input mono" value={git.name} onChange={(e) => setGit({ ...git, name: e.target.value })} />
+          </Field>
+        </>
+      ) : (
+        <Field label="URL du remote" hint="https://github.com/org/repo.git ou l’URL Cursor Origin.">
+          <input className="input mono" autoFocus placeholder="https://github.com/…" value={url} onChange={(e) => setUrl(e.target.value)} />
+        </Field>
+      )}
     </Modal>
   )
 }

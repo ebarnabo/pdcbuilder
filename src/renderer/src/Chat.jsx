@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { X, Send, Square, Sparkles, FileDown, PlusCircle, Eraser } from 'lucide-react'
-
-const api = window.pdc
+import { api } from './bridge.js'
 const uid = () => Math.random().toString(36).slice(2, 10)
 
 /** Découpe la réponse en blocs texte / code, en lisant l'info-string ```lang path=… */

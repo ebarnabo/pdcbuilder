@@ -7,14 +7,13 @@ import Blueprints from './Blueprints.jsx'
 import Settings from './Settings.jsx'
 import Chat from './Chat.jsx'
 import { Chevron } from './ui.jsx'
-
-const api = window.pdc
+import { api, waitForApi } from './bridge.js'
 
 const VIEWS = {
   projects: { label: 'Projets', icon: Boxes, title: 'Projets', sub: 'Créer, lancer, construire' },
   blueprints: { label: 'Blueprints', icon: Bookmark, title: 'Blueprints', sub: 'Bases réutilisables' },
   catalog: { label: 'Catalogue', icon: Layers, title: 'Catalogue', sub: 'Frameworks et librairies' },
-  settings: { label: 'Réglages', icon: Cog, title: 'Réglages', sub: 'Atelier et IA' }
+  settings: { label: 'Réglages', icon: Cog, title: 'Réglages', sub: 'Atelier, dépôts et IA' }
 }
 const ORDER = Object.keys(VIEWS)
 const NAV_STEP = 46 // hauteur 42 + gap 4
@@ -32,20 +31,34 @@ export default function App() {
   const [toast, setToast] = useState(null)
   const [stuck, setStuck] = useState(false)
   const [dragging, setDragging] = useState(false)
+  const [bootError, setBootError] = useState(null)
   const logRef = useRef(null)
   const lastH = useRef(300)
 
-  const refresh = useCallback(() => api.state.get().then(setState), [])
-  useEffect(() => { refresh() }, [refresh])
+  const refresh = useCallback(() => {
+    if (!window.pdc) return Promise.resolve()
+    return api.state.get().then(setState).catch((err) => {
+      setBootError(err?.message || String(err))
+    })
+  }, [])
+  useEffect(() => {
+    waitForApi()
+      .then(() => refresh())
+      .catch((err) => setBootError(err.message))
+  }, [refresh])
 
   useEffect(() => {
-    const offLog = api.on('proc:log', (entry) => {
-      setLogs((l) => [...l.slice(-800), entry])
-      setConsoleH((h) => (h === 0 ? lastH.current : h))
-    })
-    const offState = api.on('proc:state', refresh)
-    const offProject = api.on('project:changed', refresh)
-    return () => { offLog(); offState(); offProject() }
+    let unsub = () => {}
+    waitForApi().then(() => {
+      const offLog = api.on('proc:log', (entry) => {
+        setLogs((l) => [...l.slice(-800), entry])
+        setConsoleH((h) => (h === 0 ? lastH.current : h))
+      })
+      const offState = api.on('proc:state', refresh)
+      const offProject = api.on('project:changed', refresh)
+      unsub = () => { offLog(); offState(); offProject() }
+    }).catch(() => {})
+    return () => unsub()
   }, [refresh])
 
   useEffect(() => { logRef.current?.scrollTo({ top: 1e9, behavior: 'smooth' }) }, [logs, consoleH])
@@ -98,6 +111,22 @@ export default function App() {
     setToast({ message, isError, key: Date.now() })
     setTimeout(() => setToast((t) => (t?.message === message ? null : t)), 3400)
   }, [])
+
+  if (bootError) {
+    return (
+      <div className="shell">
+        <nav className="rail"><div className="drag" /></nav>
+        <main className="main">
+          <div className="content"><div className="content-inner">
+            <div className="empty">
+              <strong>Impossible de démarrer l’interface</strong>
+              <p>{bootError}</p>
+            </div>
+          </div></div>
+        </main>
+      </div>
+    )
+  }
 
   if (!state) {
     return (

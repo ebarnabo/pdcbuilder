@@ -1,8 +1,7 @@
 import { useState } from 'react'
 import { Plus, Trash2, Pencil, Bookmark, FileCode2 } from 'lucide-react'
 import { Modal, Field, Empty, LibraryPicker } from './ui.jsx'
-
-const api = window.pdc
+import { api } from './bridge.js'
 
 export default function Blueprints({ state, refresh, toast }) {
   const [edit, setEdit] = useState(null)

@@ -1,13 +1,26 @@
 import { app, BrowserWindow, ipcMain, shell, dialog, nativeTheme } from 'electron'
 import { join, dirname, basename } from 'path'
+import { fileURLToPath } from 'url'
 import { existsSync, mkdirSync, rmSync, cpSync, readFileSync, writeFileSync, readdirSync, statSync } from 'fs'
 import { platform } from 'os'
 import * as store from './store.js'
 import * as runner from './runner.js'
 import * as ai from './ai.js'
+import * as git from './git.js'
 
+const __dirname = dirname(fileURLToPath(import.meta.url))
 const isMac = platform() === 'darwin'
+const isDev = Boolean(process.env.ELECTRON_RENDERER_URL)
 let win = null
+
+function resolvePreload() {
+  const dir = join(__dirname, '../preload')
+  for (const name of ['index.cjs', 'index.mjs', 'index.js']) {
+    const candidate = join(dir, name)
+    if (existsSync(candidate)) return candidate
+  }
+  return join(dir, 'index.cjs')
+}
 
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4)
 const slug = (s) =>
@@ -15,6 +28,7 @@ const slug = (s) =>
     .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'projet'
 
 function createWindow() {
+  const preload = resolvePreload()
   win = new BrowserWindow({
     width: 1320,
     height: 880,
@@ -22,24 +36,49 @@ function createWindow() {
     minHeight: 680,
     show: false,
     backgroundColor: '#141110',
+    autoHideMenuBar: true,
     titleBarStyle: isMac ? 'hiddenInset' : 'hidden',
     trafficLightPosition: { x: 20, y: 22 },
     titleBarOverlay: isMac ? false : { color: '#141110', symbolColor: '#F3EDE6', height: 56 },
     vibrancy: isMac ? 'under-window' : undefined,
     webPreferences: {
-      preload: join(import.meta.dirname, '../preload/index.js'),
-      sandbox: false
+      preload,
+      sandbox: false,
+      contextIsolation: true
     }
   })
 
-  win.once('ready-to-show', () => win.show())
+  const reveal = () => { if (win && !win.isDestroyed() && !win.isVisible()) win.show() }
+  win.once('ready-to-show', reveal)
+  setTimeout(reveal, 1500)
+
+  win.webContents.on('did-fail-load', (_e, code, desc, url) => {
+    console.error('[pdc] chargement échoué', { code, desc, url })
+    reveal()
+  })
+  win.webContents.on('preload-error', (_e, path, error) => {
+    console.error('[pdc] preload', path, error)
+  })
+  win.webContents.on('console-message', (_e, level, message, line, sourceId) => {
+    if (level >= 2) console.error('[renderer]', message, sourceId ? `(${sourceId}:${line})` : '')
+  })
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.type === 'keyDown' && input.key === 'F12') {
+      event.preventDefault()
+      win.webContents.toggleDevTools()
+    }
+  })
+
   win.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url)
     return { action: 'deny' }
   })
 
-  if (process.env.ELECTRON_RENDERER_URL) win.loadURL(process.env.ELECTRON_RENDERER_URL)
-  else win.loadFile(join(import.meta.dirname, '../renderer/index.html'))
+  if (isDev) {
+    win.loadURL(process.env.ELECTRON_RENDERER_URL)
+  } else {
+    win.loadFile(join(__dirname, '../renderer/index.html'))
+  }
 }
 
 nativeTheme.themeSource = 'dark'
@@ -141,7 +180,8 @@ ipcMain.handle('project:create', async (_e, payload) => {
     blueprintId: payload.blueprintId || null,
     notes: payload.notes || '',
     createdAt: Date.now(),
-    status: 'scaffolding'
+    status: 'scaffolding',
+    repo: null
   }
   store.patch({ projects: [project, ...s.projects] })
   win.webContents.send('project:changed')
@@ -163,12 +203,29 @@ ipcMain.handle('project:create', async (_e, payload) => {
     for (const cmd of bp.commands || []) await runner.exec(win, id, cmd, path, 'blueprint')
   }
 
+  let gitError = null
+  let repo = null
+  const gitOpts = git.resolveOptions(payload.git, s.git)
+  if (res.ok && gitOpts.create) {
+    const published = await git.publish(win, id, path, {
+      ...gitOpts,
+      name: gitOpts.name || dirName,
+      description: `Projet ${payload.name} — PDC Builder`
+    })
+    repo = published.repo || null
+    if (!published.ok && !published.skipped) gitError = published.error
+  }
+
   const s2 = store.read()
   store.patch({
-    projects: s2.projects.map((p) => (p.id === id ? { ...p, status: res.ok ? 'ready' : 'error' } : p))
+    projects: s2.projects.map((p) => (p.id === id ? {
+      ...p,
+      status: res.ok ? 'ready' : 'error',
+      repo
+    } : p))
   })
   win.webContents.send('project:changed')
-  return { ok: res.ok, id, path }
+  return { ok: res.ok, id, path, repo, gitError }
 })
 
 ipcMain.handle('project:import', async (_e, { path, frameworkId, name }) => {
@@ -353,6 +410,46 @@ ipcMain.handle('blueprint:from-project', (_e, { id, name }) => {
   }
   store.patch({ blueprints: [bp, ...s.blueprints] })
   return { ok: true, id: bp.id }
+})
+
+/* ────────────────────────────  git  ──────────────────────────── */
+
+function projectById(id) {
+  return store.read().projects.find((p) => p.id === id)
+}
+
+function patchProject(id, fields) {
+  const s = store.read()
+  store.patch({ projects: s.projects.map((p) => (p.id === id ? { ...p, ...fields } : p)) })
+}
+
+ipcMain.handle('git:status', () => git.status())
+ipcMain.handle('git:publish', async (_e, { id, options }) => {
+  const p = projectById(id)
+  if (!p) return { ok: false, error: 'Projet introuvable.' }
+  const s = store.read()
+  const opts = git.resolveOptions({ create: true, ...options }, s.git)
+  const published = await git.publish(win, id, p.path, {
+    ...opts,
+    name: opts.name || slug(p.name),
+    description: `Projet ${p.name} — PDC Builder`
+  })
+  if (published.repo) patchProject(id, { repo: published.repo })
+  win.webContents.send('project:changed')
+  return published
+})
+ipcMain.handle('git:push', async (_e, id) => {
+  const p = projectById(id)
+  if (!p) return { ok: false, error: 'Projet introuvable.' }
+  return git.push(win, id, p.path)
+})
+ipcMain.handle('git:link', async (_e, { id, url }) => {
+  const p = projectById(id)
+  if (!p) return { ok: false, error: 'Projet introuvable.' }
+  const linked = await git.link(win, id, p.path, url)
+  if (linked.repo) patchProject(id, { repo: linked.repo })
+  win.webContents.send('project:changed')
+  return linked
 })
 
 /* ────────────────────────────  IA  ──────────────────────────── */
