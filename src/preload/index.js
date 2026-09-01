@@ -54,7 +54,10 @@ const api = {
     status: invoke('git:status'),
     publish: invoke('git:publish'),
     push: invoke('git:push'),
-    link: invoke('git:link')
+    pull: invoke('git:pull'),
+    link: invoke('git:link'),
+    list: invoke('git:list'),
+    clone: invoke('git:clone')
   },
   app: {
     updateStatus: invoke('app:update-status'),

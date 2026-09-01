@@ -501,6 +501,62 @@ ipcMain.handle('git:link', async (_e, { id, url }) => {
   win.webContents.send('project:changed')
   return linked
 })
+ipcMain.handle('git:list', (_e, payload) => git.listRepos(payload?.provider || 'github', { org: payload?.org || '' }))
+ipcMain.handle('git:pull', async (_e, id) => {
+  const p = projectById(id)
+  if (!p) return { ok: false, error: 'Projet introuvable.' }
+  return git.pull(win, id, p.path)
+})
+ipcMain.handle('git:clone', async (_e, payload) => {
+  const s = store.read()
+  const source = git.resolveCloneSource(payload)
+  if (!source?.url && !source?.fullName) {
+    return { ok: false, error: 'Indique un dépôt (owner/nom) ou colle une URL.' }
+  }
+  const workspace = payload.workspace || s.workspace
+  const folder = slug(payload.folder || source.name || 'projet')
+  const dest = join(workspace, folder)
+  if (existsSync(dest)) return { ok: false, error: `Le dossier ${folder} existe déjà dans l’atelier.` }
+  if (s.projects.some((p) => p.path === dest)) return { ok: false, error: 'Ce projet est déjà dans la liste.' }
+
+  mkdirSync(workspace, { recursive: true })
+  const id = uid()
+  const project = {
+    id,
+    name: payload.name || source.name || folder,
+    path: dest,
+    frameworkId: s.frameworks[0]?.id,
+    libs: [],
+    createdAt: Date.now(),
+    status: 'cloning'
+  }
+  store.patch({ projects: [project, ...s.projects] })
+  win.webContents.send('project:changed')
+
+  const cloned = await git.clone(win, id, dest, payload)
+  if (!cloned.ok) {
+    try { if (existsSync(dest)) rmSync(dest, { recursive: true, force: true }) } catch { /* ignore */ }
+    store.patch({ projects: store.read().projects.filter((p) => p.id !== id) })
+    win.webContents.send('project:changed')
+    return cloned
+  }
+
+  const fwId = git.detectFramework(dest, s.frameworks) || s.frameworks[0]?.id
+  let installError = null
+  if (existsSync(join(dest, 'package.json'))) {
+    const inst = await runner.exec(win, id, git.installCommand(dest), dest, 'dépendances')
+    if (!inst.ok) installError = inst.stderr || 'L’installation des dépendances a échoué. Voir la console.'
+  }
+  patchProject(id, {
+    status: installError ? 'error' : 'ready',
+    frameworkId: fwId,
+    repo: cloned.repo,
+    path: dest
+  })
+  docs.syncAllProjects()
+  win.webContents.send('project:changed')
+  return { ok: true, id, path: dest, repo: cloned.repo, installError }
+})
 
 /* ────────────────────────────  IA  ──────────────────────────── */
 

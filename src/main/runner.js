@@ -25,7 +25,7 @@ export function exec(win, projectId, command, cwd, label = '') {
     const child = spawn(command, {
       cwd,
       shell: true,
-      env: { ...process.env, FORCE_COLOR: '0', CI: '1', ADBLOCK: '1', GH_PROMPT_DISABLED: '1' },
+      env: { ...process.env, FORCE_COLOR: '0', CI: '1', ADBLOCK: '1', GH_PROMPT_DISABLED: '1', GIT_TERMINAL_PROMPT: '0' },
       detached: !isWin
     })
 

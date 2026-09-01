@@ -2,10 +2,10 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import {
   Play, Square, Hammer, FolderOpen, Copy, Trash2, Globe, Plus, Package,
   Code2, Layers, MoreHorizontal, FolderInput, Bookmark, Boxes, ExternalLink,
-  Github, CloudUpload, Link2, Database
+  Github, CloudUpload, CloudDownload, Link2, Database
 } from 'lucide-react'
 import { Modal, Menu, Field, SearchBox, LibraryPicker, Empty, bytes, ago, shortPath, Segmented } from './ui.jsx'
-import { GitFields, RepoChip } from './GitFields.jsx'
+import { GitFields, RepoChip, CloneModal } from './GitFields.jsx'
 import { DatabasePicker } from './DatabaseFields.jsx'
 import { api } from './bridge.js'
 
@@ -19,6 +19,7 @@ export default function Projects({ state, refresh, toast, focusProject }) {
   const [menu, setMenu] = useState(null)
   const [repo, setRepo] = useState(null)
   const [db, setDb] = useState(null)
+  const [cloning, setCloning] = useState(false)
 
   const fwById = useMemo(() => Object.fromEntries(state.frameworks.map((f) => [f.id, f])), [state.frameworks])
 
@@ -53,6 +54,9 @@ export default function Projects({ state, refresh, toast, focusProject }) {
           <p>{state.projects.length || 'Aucun'} projet{state.projects.length > 1 ? 's' : ''} · {shortPath(state.workspace)}</p>
         </div>
         <SearchBox value={query} onChange={setQuery} placeholder="Filtrer" />
+        <button className="btn" onClick={() => setCloning(true)}>
+          <CloudDownload size={15} /> Récupérer
+        </button>
         <button className="btn" onClick={async () => {
           const path = await api.fs.pickDir()
           if (path) await act(() => api.project.import({ path }), 'Projet ajouté')
@@ -70,8 +74,13 @@ export default function Projects({ state, refresh, toast, focusProject }) {
           title={query ? 'Aucun projet ne correspond' : 'Rien à construire pour l’instant'}
           text={query
             ? 'Change le filtre pour retrouver un projet.'
-            : 'Choisis un framework, une base de données si besoin, coche les librairies utiles, et PDC Builder monte le projet pour toi.'}
-          action={!query && <button className="btn primary" onClick={() => setCreating(true)}><Plus size={15} /> Créer un projet</button>}
+            : 'Crée un projet, ou clone un dépôt GitHub / Cursor Origin déjà existant.'}
+          action={!query && (
+            <div className="row" style={{ justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button className="btn primary" onClick={() => setCreating(true)}><Plus size={15} /> Créer un projet</button>
+              <button className="btn" onClick={() => setCloning(true)}><CloudDownload size={15} /> Récupérer un dépôt</button>
+            </div>
+          )}
         />
       ) : (
         <div className="grid">
@@ -116,6 +125,23 @@ export default function Projects({ state, refresh, toast, focusProject }) {
             if (!r.ok) toast(r.error || 'Création interrompue', true)
             else if (r.gitError) toast(`${payload.name} est prêt, mais le dépôt a échoué : ${r.gitError}`, true)
             else toast(r.repo?.url ? `${payload.name} est prêt · dépôt créé` : `${payload.name} est prêt`)
+            refresh()
+          }}
+        />
+      )}
+
+      {cloning && (
+        <CloneModal
+          state={state}
+          onClose={() => setCloning(false)}
+          onDone={(r) => {
+            setCloning(false)
+            if (!r?.ok) toast(r?.error || 'Clonage impossible', true)
+            else {
+              focusProject(r.id)
+              if (r.installError) toast(`${r.repo?.name || 'Dépôt'} cloné, mais les dépendances ont échoué.`, true)
+              else toast(`${r.repo?.name || 'Dépôt'} est dans l’atelier`)
+            }
             refresh()
           }}
         />
@@ -205,10 +231,11 @@ export default function Projects({ state, refresh, toast, focusProject }) {
 
 function ProjectCard({ project: p, framework: fw, build, index, onMenu, act, focusProject }) {
   const btnRef = useRef(null)
-  const busy = p.status === 'scaffolding'
+  const busy = p.status === 'scaffolding' || p.status === 'cloning'
   const live = p.status === 'running' || p.status === 'starting'
 
-  const statusLabel = busy ? 'Installation en cours'
+  const statusLabel = p.status === 'cloning' ? 'Clonage du dépôt'
+    : busy ? 'Installation en cours'
     : p.status === 'running' ? 'Serveur actif'
     : p.status === 'starting' ? 'Démarrage'
     : p.status === 'error' ? 'Dernière opération en échec'
@@ -290,6 +317,7 @@ function ProjectMenu({ project: p, anchor, editor, onClose, onDuplicate, onDelet
       {p.repo?.url ? (
         <>
           <button onClick={() => run(() => api.fs.openUrl(p.repo.url))}><Github size={15} /> Ouvrir le dépôt</button>
+          <button onClick={() => run(() => act(() => api.git.pull(p.id), 'Dépôt à jour'))}><CloudDownload size={15} /> Récupérer les changements</button>
           <button onClick={() => run(() => act(() => api.git.push(p.id), 'Push envoyé'))}><CloudUpload size={15} /> Pousser les changements</button>
         </>
       ) : (

@@ -1,6 +1,6 @@
 import { spawn } from 'child_process'
-import { existsSync, readFileSync, writeFileSync } from 'fs'
-import { join } from 'path'
+import { existsSync, readFileSync, writeFileSync, renameSync } from 'fs'
+import { join, dirname } from 'path'
 import { homedir, platform } from 'os'
 import * as runner from './runner.js'
 
@@ -26,7 +26,7 @@ function run(command, cwd, extraEnv = {}) {
     const child = spawn(command, {
       cwd,
       shell: true,
-      env: { ...process.env, FORCE_COLOR: '0', CI: '1', GH_PROMPT_DISABLED: '1', ...extraEnv }
+      env: { ...process.env, FORCE_COLOR: '0', CI: '1', GH_PROMPT_DISABLED: '1', GIT_TERMINAL_PROMPT: '0', ...extraEnv }
     })
     let stdout = ''
     let stderr = ''
@@ -359,4 +359,221 @@ export async function link(win, projectId, dir, url) {
       visibility: provider === 'origin' ? 'private' : null
     }
   }
+}
+
+function githubFullName(url) {
+  const m = String(url || '').match(/github\.com[/:]([^/\s]+)\/([^/\s#?]+)/i)
+  if (!m) return null
+  return `${m[1]}/${m[2].replace(/\.git$/i, '')}`
+}
+
+function originFullName(url) {
+  const m = String(url || '').match(/origin\.cursor\.com\/([^/\s]+\/[^/\s.]+)/i)
+    || String(url || '').match(/cursor\.com\/codebase\/([^/\s]+\/[^/\s.]+)/i)
+  return m ? m[1].replace(/\.git$/i, '') : null
+}
+
+export function resolveCloneSource(payload = {}) {
+  let url = String(payload.url || '').trim()
+  const repo = String(payload.repo || '').trim().replace(/\.git$/i, '').replace(/^\/+|\/+$/g, '')
+  const providerHint = payload.provider === 'origin' ? 'origin' : 'github'
+
+  if (/^git@github\.com:/i.test(url)) {
+    url = `https://github.com/${url.replace(/^git@github\.com:/i, '')}`
+  } else if (/^(github\.com|origin\.cursor\.com)\//i.test(url)) {
+    url = `https://${url}`
+  }
+
+  if (url) {
+    const provider = providerFromUrl(url)
+    const fullName = provider === 'origin' ? originFullName(url) : githubFullName(url)
+    return {
+      provider,
+      fullName: fullName || repo || null,
+      url,
+      name: repoNameFromUrl(fullName || url)
+    }
+  }
+
+  if (!repo) return null
+  const fullName = repo.includes('/') ? repo : null
+  const cloneUrl = providerHint === 'origin'
+    ? (fullName ? `https://origin.cursor.com/${fullName}.git` : null)
+    : (fullName ? `https://github.com/${fullName}.git` : `https://github.com/${repo}.git`)
+  return {
+    provider: providerHint,
+    fullName: fullName || repo,
+    url: cloneUrl,
+    name: repoNameFromUrl(fullName || repo)
+  }
+}
+
+function mapGithubRepo(row) {
+  const fullName = row.nameWithOwner || row.full_name || row.name
+  const url = row.url || (fullName ? `https://github.com/${fullName}` : null)
+  return {
+    id: fullName,
+    name: row.name || repoNameFromUrl(fullName),
+    fullName,
+    description: row.description || '',
+    url,
+    private: Boolean(row.isPrivate ?? row.private),
+    updatedAt: row.updatedAt || row.updated_at || null,
+    provider: 'github'
+  }
+}
+
+export async function listRepos(provider, { org } = {}) {
+  if (provider === 'origin') {
+    if (isWin) {
+      return {
+        ok: false,
+        repos: [],
+        error: 'Cursor Origin n’est pas disponible sur Windows. Colle l’URL HTTPS du dépôt.'
+      }
+    }
+    const bin = originBin()
+    if (!(bin !== 'origin' || await hasCommand('origin'))) {
+      return { ok: false, repos: [], error: 'CLI Origin introuvable. Colle l’URL, ou installe origin.' }
+    }
+    const listed = await run(`${q(bin)} repo list`, homedir())
+    if (!listed.ok) {
+      return { ok: false, repos: [], error: (listed.stderr || listed.stdout || 'origin repo list a échoué.').trim() }
+    }
+    const repos = []
+    const seen = new Set()
+    for (const line of String(listed.stdout || '').split(/\r?\n/)) {
+      const full = (line.match(/([\w.-]+\/[\w.-]+)/) || [])[1]
+      const href = firstHttps(line)
+      const fullName = full || originFullName(href)
+      if (!fullName || seen.has(fullName)) continue
+      if (/^name$/i.test(fullName.split('/')[0])) continue
+      seen.add(fullName)
+      repos.push({
+        id: fullName,
+        name: repoNameFromUrl(fullName),
+        fullName,
+        description: '',
+        url: pageUrl('origin', href, fullName) || href || `${ORIGIN_PAGE}/${fullName}`,
+        private: true,
+        updatedAt: null,
+        provider: 'origin'
+      })
+    }
+    return { ok: true, repos }
+  }
+
+  if (!(await hasCommand('gh'))) {
+    return { ok: false, repos: [], error: 'GitHub CLI (gh) n’est pas installé. Colle l’URL du dépôt.' }
+  }
+  const who = await run('gh api user --jq .login', homedir())
+  if (!who.ok || !who.stdout.trim()) {
+    return { ok: false, repos: [], error: 'GitHub n’est pas connecté. Lance gh auth login, ou colle l’URL.' }
+  }
+  const target = org ? ` ${q(org)}` : ''
+  const listed = await run(
+    `gh repo list${target} --limit 50 --json name,nameWithOwner,description,url,isPrivate,updatedAt`,
+    homedir()
+  )
+  if (!listed.ok) {
+    return { ok: false, repos: [], error: (listed.stderr || listed.stdout || 'gh repo list a échoué.').trim() }
+  }
+  let rows = []
+  try { rows = JSON.parse(listed.stdout || '[]') }
+  catch { return { ok: false, repos: [], error: 'Réponse GitHub illisible.' } }
+  return { ok: true, repos: (Array.isArray(rows) ? rows : []).map(mapGithubRepo) }
+}
+
+export function detectFramework(dir, frameworks = []) {
+  const pkgPath = join(dir, 'package.json')
+  if (!existsSync(pkgPath)) return frameworks[0]?.id || null
+  let pkg
+  try { pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) }
+  catch { return frameworks[0]?.id || null }
+  const deps = { ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) }
+  const has = (name) => Boolean(deps[name])
+  const pick = (id) => (frameworks.some((f) => f.id === id) ? id : null)
+  if (has('next')) return pick('next') || 'next'
+  if (has('nuxt') || has('nuxt3')) return pick('nuxt') || 'nuxt'
+  if (has('@sveltejs/kit')) return pick('sveltekit') || 'sveltekit'
+  if (has('astro')) return pick('astro') || 'astro'
+  if (has('electron') && has('react')) return pick('electron-react') || 'electron-react'
+  if (has('vue') && has('vite')) return pick('vite-vue') || 'vite-vue'
+  if (has('svelte') && has('vite')) return pick('vite-svelte') || 'vite-svelte'
+  if (has('react') && has('vite')) return pick('vite-react') || 'vite-react'
+  if (has('vite')) return pick('vite-vanilla') || 'vite-vanilla'
+  return frameworks[0]?.id || null
+}
+
+export function installCommand(dir) {
+  if (existsSync(join(dir, 'pnpm-lock.yaml'))) return 'pnpm install'
+  if (existsSync(join(dir, 'yarn.lock'))) return 'yarn install'
+  if (existsSync(join(dir, 'bun.lockb')) || existsSync(join(dir, 'bun.lock'))) return 'bun install'
+  return 'npm install'
+}
+
+export async function clone(win, projectId, dest, payload) {
+  const source = resolveCloneSource(payload)
+  if (!source?.url && !source?.fullName) {
+    return { ok: false, error: 'Indique un dépôt (owner/nom) ou colle une URL.', repo: null }
+  }
+  if (!(await hasCommand('git'))) return { ok: false, error: 'Git n’est pas installé.', repo: null }
+
+  let cloned
+  if (source.provider === 'github' && source.fullName && await hasCommand('gh')) {
+    cloned = await logged(
+      win,
+      projectId,
+      `gh repo clone ${q(source.fullName)} ${q(dest)}`,
+      homedir(),
+      `clone GitHub — ${source.fullName}`
+    )
+  } else if (source.provider === 'origin' && source.fullName && !isWin) {
+    const bin = originBin()
+    const parent = dirname(dest)
+    cloned = await logged(
+      win,
+      projectId,
+      `${q(bin)} repo clone ${q(source.fullName)}`,
+      parent,
+      `clone Origin — ${source.fullName}`
+    )
+    const landed = join(parent, source.name)
+    if (cloned.ok && existsSync(landed) && landed !== dest) {
+      try { renameSync(landed, dest) }
+      catch (e) { return { ok: false, error: e.message, repo: null } }
+    }
+    if (!cloned.ok && source.url) {
+      cloned = await logged(win, projectId, `git clone ${q(source.url)} ${q(dest)}`, homedir(), 'clone git')
+    }
+  } else {
+    cloned = await logged(win, projectId, `git clone ${q(source.url)} ${q(dest)}`, homedir(), 'clone git')
+  }
+
+  if (!cloned.ok) {
+    return { ok: false, error: (cloned.stderr || cloned.stdout || 'Le clonage a échoué.').trim(), repo: null }
+  }
+
+  const remote = (await currentRemote(dest)) || source.url
+  const provider = providerFromUrl(remote) || source.provider
+  const name = repoNameFromUrl(remote) || source.name
+  return {
+    ok: true,
+    repo: {
+      provider,
+      name,
+      url: pageUrl(provider, remote, name) || remote,
+      remote,
+      visibility: provider === 'origin' ? 'private' : null
+    }
+  }
+}
+
+export async function pull(win, projectId, dir) {
+  if (!existsSync(dir)) return { ok: false, error: 'Dossier introuvable.' }
+  const remote = await currentRemote(dir)
+  if (!remote) return { ok: false, error: 'Aucun remote origin. Lie un dépôt d’abord.' }
+  const pulled = await logged(win, projectId, 'git pull --ff-only', dir, 'pull')
+  if (!pulled.ok) return { ok: false, error: pulled.stderr || pulled.stdout || 'git pull a échoué (avance rapide seulement).' }
+  return { ok: true, url: pageUrl(providerFromUrl(remote), remote) }
 }

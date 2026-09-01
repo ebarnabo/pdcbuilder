@@ -148,8 +148,8 @@ export default function Settings({ state, refresh, toast, update, docsStatus }) 
       <div className="card">
         <h4 className="card-title">Dépôts Git</h4>
         <p className="card-desc">
-          Un dépôt GitHub (ou Cursor Origin) peut être créé en même temps que le projet.
-          Ces options sont mémorisées et préremplies à chaque création.
+          Un dépôt GitHub ou Cursor Origin peut être créé avec le projet, ou cloné depuis Projets → Récupérer.
+          Le push et le pull se font ensuite dans le menu de la carte. Ces options sont mémorisées pour les créations.
         </p>
         <GitFields
           value={git}
