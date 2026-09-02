@@ -415,7 +415,13 @@ function syncProjects(projects, index) {
     mkdirSync(dest, { recursive: true })
     const libs = project.libs || []
     const lines = [
-      '# Documentation des librairies',
+      '# Ressources PDC Builder',
+      '',
+      'Fichiers pour les agents IA dans ce dépôt.',
+      '',
+      '- [Préférences utilisateur](./preferences.md) — atelier, Git, bases, catalogue, projets.',
+      '',
+      '## Documentation des librairies',
       '',
       'Extraits locaux générés par PDC Builder pour les agents IA.',
       ''

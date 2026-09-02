@@ -6,11 +6,13 @@ import { Field, ScoreNotes } from './ui.jsx'
 import { GitFields, GitStatus } from './GitFields.jsx'
 import { DatabasePicker } from './DatabaseFields.jsx'
 import { DatabaseAccounts } from './DatabaseCloud.jsx'
+import { PackageManagerPicker } from './PackageManagerPicker.jsx'
 import { api } from './bridge.js'
 
 const STEPS = [
   { id: 'welcome', label: 'Bienvenue', optional: false },
   { id: 'workspace', label: 'Atelier', optional: true },
+  { id: 'pm', label: 'Paquets', optional: true },
   { id: 'git', label: 'Dépôts', optional: true },
   { id: 'database', label: 'Bases', optional: true },
   { id: 'ai', label: 'Assistant', optional: true },
@@ -26,6 +28,7 @@ export default function Onboarding({ state, onComplete }) {
   const [gitStatus, setGitStatus] = useState(null)
   const [workspace, setWorkspace] = useState(state.workspace)
   const [editor, setEditor] = useState(state.editor)
+  const [packageManager, setPackageManager] = useState(state.packageManager || 'npm')
   const [git, setGit] = useState({
     autoCreate: true,
     provider: 'github',
@@ -51,6 +54,7 @@ export default function Onboarding({ state, onComplete }) {
     await saveFields({
       workspace,
       editor,
+      packageManager,
       git: {
         autoCreate: true,
         provider: 'github',
@@ -73,6 +77,7 @@ export default function Onboarding({ state, onComplete }) {
 
   const persistStep = async () => {
     if (current.id === 'workspace') await saveFields({ workspace, editor })
+    if (current.id === 'pm') await saveFields({ packageManager })
     if (current.id === 'git') await saveFields({ git })
     if (current.id === 'database') await saveFields({ database })
     if (current.id === 'ai') await saveFields({ ai })
@@ -159,6 +164,14 @@ export default function Onboarding({ state, onComplete }) {
             </>
           )}
 
+          {current.id === 'pm' && (
+            <>
+              <h2 id="onboard-title">Gestionnaire de paquets</h2>
+              <p className="onboard-lead">npm, pnpm, Yarn ou Bun — choisis celui qui installera tes dépendances par défaut.</p>
+              <PackageManagerPicker value={packageManager} onChange={setPackageManager} />
+            </>
+          )}
+
           {current.id === 'git' && (
             <>
               <h2 id="onboard-title">Dépôts distants</h2>
@@ -238,6 +251,7 @@ export default function Onboarding({ state, onComplete }) {
               </div>
               <div className="chip-row" style={{ justifyContent: 'center' }}>
                 <span className="chip">{workspace.split(/[/\\]/).pop() || workspace}</span>
+                <span className="chip">{packageManager}</span>
                 <span className="chip">{git.autoCreate ? `${git.provider} · dépôt auto` : 'Sans dépôt auto'}</span>
                 <span className="chip">{database.defaultId === 'none' ? 'Sans base' : database.defaultId}</span>
                 <span className="chip accent">{providers[ai.provider]?.label || ai.provider}</span>

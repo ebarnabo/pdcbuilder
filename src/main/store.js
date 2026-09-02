@@ -2,6 +2,7 @@ import { app } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
 import { homedir } from 'os'
+import * as preferences from './preferences.js'
 
 const FILE = () => join(app.getPath('userData'), 'pdc-builder.json')
 
@@ -787,6 +788,7 @@ export function read() {
 export function write(next) {
   cache = next
   writeFileSync(FILE(), JSON.stringify(next, null, 2), 'utf8')
+  try { preferences.sync(next) } catch { /* fenêtre pas prête */ }
   return cache
 }
 

@@ -2,15 +2,17 @@ import { app, BrowserWindow, ipcMain, shell, dialog, nativeTheme } from 'electro
 import { join, dirname, basename } from 'path'
 import { fileURLToPath } from 'url'
 import { existsSync, mkdirSync, rmSync, cpSync, readFileSync, writeFileSync, readdirSync, statSync } from 'fs'
-import { platform } from 'os'
+import { platform, homedir } from 'os'
 import * as store from './store.js'
 import * as runner from './runner.js'
 import * as ai from './ai.js'
 import * as git from './git.js'
 import * as updater from './updater.js'
 import * as docs from './docs.js'
+import * as preferences from './preferences.js'
 import * as database from './database.js'
 import * as dbcloud from './dbcloud.js'
+import * as pm from './pm.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const isMac = platform() === 'darwin'
@@ -116,6 +118,7 @@ app.whenReady().then(() => {
       if (win && !win.isDestroyed()) win.webContents.send('docs:status', snap)
     }
   })
+  try { preferences.sync(store.read()) } catch { /* ignore */ }
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
 })
 app.on('window-all-closed', () => { runner.stopAll(); if (!isMac) app.quit() })
@@ -145,6 +148,16 @@ ipcMain.handle('state:reset-catalog', () => store.patch({
   frameworks: store.DEFAULT_FRAMEWORKS,
   libraries: store.DEFAULT_LIBRARIES
 }))
+
+ipcMain.handle('pm:status', async () => {
+  const s = store.read()
+  return pm.status(s.packageManager || 'npm')
+})
+ipcMain.handle('pm:install', async (_e, id) => {
+  const cmd = pm.globalInstallCommand(id)
+  if (!cmd) return { ok: false, error: 'Ce gestionnaire est déjà inclus ou inconnu.' }
+  return runner.exec(win, 'system', cmd, homedir(), `installation — ${id}`)
+})
 
 /* ─────────────────────  système de fichiers  ───────────────────── */
 
@@ -186,13 +199,16 @@ ipcMain.handle('app:open-editor', (_e, { path, editor }) =>
 
 function installLibs(projectId, path, libs) {
   const s = store.read()
+  const pmId = s.packageManager || 'npm'
   const all = s.libraries.flatMap((c) => c.items)
   const find = (pkg) => all.find((i) => i.pkg === pkg)
   const prod = libs.filter((p) => !find(p)?.dev)
   const dev = libs.filter((p) => find(p)?.dev)
   const jobs = []
-  if (prod.length) jobs.push(`npm install ${prod.join(' ')}`)
-  if (dev.length) jobs.push(`npm install -D ${dev.join(' ')}`)
+  const prodCmd = pm.addPackages(pmId, prod, false)
+  const devCmd = pm.addPackages(pmId, dev, true)
+  if (prodCmd) jobs.push(prodCmd)
+  if (devCmd) jobs.push(devCmd)
   return jobs.reduce(
     (chain, cmd) => chain.then(() => runner.exec(win, projectId, cmd, path, 'librairies')),
     Promise.resolve({ ok: true })
@@ -200,6 +216,8 @@ function installLibs(projectId, path, libs) {
 }
 
 async function applyDatabase(projectId, path, frameworkId, databaseId, { provision = false, name } = {}) {
+  const s = store.read()
+  const pmId = s.packageManager || 'npm'
   const db = database.byId(databaseId)
   if (!db || db.id === 'none') return { ok: true, databaseId: 'none' }
   const written = database.writeFiles(path, db.id, frameworkId)
@@ -208,10 +226,12 @@ async function applyDatabase(projectId, path, frameworkId, databaseId, { provisi
   }
   let res = { ok: true }
   if (written.packages.length) {
-    res = await runner.exec(win, projectId, `npm install ${written.packages.join(' ')}`, path, 'base de données')
+    const cmd = pm.addPackages(pmId, written.packages, false)
+    res = await runner.exec(win, projectId, cmd, path, 'base de données')
   }
   if (res.ok && written.extraDev.length) {
-    res = await runner.exec(win, projectId, `npm install -D ${written.extraDev.join(' ')}`, path, 'base de données (dev)')
+    const cmd = pm.addPackages(pmId, written.extraDev, true)
+    res = await runner.exec(win, projectId, cmd, path, 'base de données (dev)')
   }
   if (res.ok && provision) {
     runner.log(win, projectId, `provision ${db.name}…`, 'info')
@@ -259,9 +279,12 @@ ipcMain.handle('project:create', async (_e, payload) => {
   store.patch({ projects: [project, ...s.projects] })
   win.webContents.send('project:changed')
 
-  const create = fw.create.replaceAll('{{name}}', dirName)
+  const pmId = s.packageManager || 'npm'
+  const create = pm.adaptCommand(fw.create.replaceAll('{{name}}', dirName), pmId)
   let res = await runner.exec(win, id, create, workspace, `création — ${fw.name}`)
-  if (res.ok && fw.install) res = await runner.exec(win, id, fw.install, path, 'dépendances')
+  if (res.ok && fw.install) {
+    res = await runner.exec(win, id, pm.adaptCommand(fw.install, pmId), path, 'dépendances')
+  }
   if (res.ok && project.libs.length) res = await installLibs(id, path, project.libs)
 
   if (res.ok && project.databaseId && project.databaseId !== 'none') {
@@ -355,8 +378,9 @@ ipcMain.handle('project:duplicate', async (_e, { id, name }) => {
     return { ok: false, error: e.message }
   }
 
-  const res = await runner.exec(win, newId, 'npm install', dest, 'dépendances')
   const s2 = store.read()
+  const pmId = s2.packageManager || 'npm'
+  const res = await runner.exec(win, newId, pm.installForPath(dest, pmId), dest, 'dépendances')
   store.patch({ projects: s2.projects.map((p) => (p.id === newId ? { ...p, status: res.ok ? 'ready' : 'error' } : p)) })
   win.webContents.send('project:changed')
   return { ok: true, id: newId }
@@ -578,7 +602,7 @@ ipcMain.handle('git:clone', async (_e, payload) => {
   const fwId = git.detectFramework(dest, s.frameworks) || s.frameworks[0]?.id
   let installError = null
   if (existsSync(join(dest, 'package.json'))) {
-    const inst = await runner.exec(win, id, git.installCommand(dest), dest, 'dépendances')
+    const inst = await runner.exec(win, id, pm.installForPath(dest, s.packageManager || 'npm'), dest, 'dépendances')
     if (!inst.ok) installError = inst.stderr || 'L’installation des dépendances a échoué. Voir la console.'
   }
   patchProject(id, {
@@ -600,7 +624,7 @@ ipcMain.handle('ai:providers', () => ai.PROVIDERS)
 ipcMain.handle('ai:models', (_e, cfg) => ai.listModels(cfg).catch((e) => ({ error: e.message })))
 ipcMain.handle('ai:stop', (_e, chatId) => { controllers.get(chatId)?.abort(); return { ok: true } })
 
-ipcMain.handle('ai:chat', async (_e, { chatId, messages, context, libs }) => {
+ipcMain.handle('ai:chat', async (_e, { chatId, messages, context, libs, projectId }) => {
   const s = store.read()
   const ctrl = new AbortController()
   controllers.set(chatId, ctrl)
@@ -609,6 +633,8 @@ ipcMain.handle('ai:chat', async (_e, { chatId, messages, context, libs }) => {
     query: lastUser?.content || '',
     projectLibs: libs || []
   })
+  const prefContext = preferences.forPrompt(s)
+  const active = projectId ? s.projects.find((p) => p.id === projectId) : null
 
   const system = [
     "Tu es l'assistant intégré de PDC Builder, un atelier de projets web sur Mac et Windows.",
@@ -617,9 +643,12 @@ ipcMain.handle('ai:chat', async (_e, { chatId, messages, context, libs }) => {
     'Pour proposer un framework à ajouter au catalogue : ```pdc-framework puis un JSON {id,name,tag,description,create,install,dev,build,preview,outDir}.',
     'Pour proposer une librairie : ```pdc-library puis {category,name,pkg,description,dev,docs}.',
     'Design : dark chaud, rayons 16–36px, grille de 8px, Inter, animations 60 fps.',
+    'Les préférences complètes sont dans preferences.md (copie projet : .pdc/preferences.md).',
+    prefContext,
+    active ? `Projet actif pour cette conversation : **${active.name}** (\`${active.id}\`) — \`${active.path}\`` : '',
     context ? `Contexte:\n${context}` : '',
     docContext
-  ].join('\n')
+  ].filter(Boolean).join('\n')
 
   try {
     await ai.chat(s.ai, messages, system,
@@ -670,3 +699,5 @@ ipcMain.handle('docs:index', () => docs.listIndex())
 ipcMain.handle('docs:get', (_e, pkg) => docs.readDoc(pkg))
 ipcMain.handle('docs:refresh', () => docs.refresh({ force: true }))
 ipcMain.handle('docs:open', () => docs.openFolder())
+ipcMain.handle('preferences:path', () => preferences.path())
+ipcMain.handle('preferences:open', () => preferences.openFolder())

@@ -66,16 +66,17 @@ export default function Chat({ state, refresh, toast, onClose, project }) {
     setInput('')
     setStreaming(true)
 
-    const context = [
-      `Frameworks du catalogue : ${state.frameworks.map((f) => f.id).join(', ')}`,
-      `Catégories de librairies : ${state.libraries.map((c) => c.name).join(', ')}`,
-      'La documentation officielle des librairies est extraite en local (fichiers .md) et fournie à l’assistant.',
-      project
-        ? `Projet actif : ${project.name} (${state.frameworks.find((f) => f.id === project.frameworkId)?.name}) — ${project.path}\nThèmes : ${themeLabels(project.themes).join(', ') || 'aucun'}\nLibrairies : ${project.libs?.join(', ') || 'aucune'}\nBase de données : ${project.databaseId && project.databaseId !== 'none' ? project.databaseId : 'aucune'}`
-        : 'Aucun projet sélectionné.'
-    ].join('\n')
+    const context = project
+      ? `Projet actif : ${project.name} — thèmes : ${themeLabels(project.themes).join(', ') || 'aucun'}`
+      : 'Aucun projet sélectionné.'
 
-    await api.ai.chat({ chatId: chatId.current, messages: history, context, libs: project?.libs || [] })
+    await api.ai.chat({
+      chatId: chatId.current,
+      messages: history,
+      context,
+      libs: project?.libs || [],
+      projectId: project?.id || null
+    })
   }
 
   const writeFile = async (path, content) => {

@@ -86,6 +86,14 @@ const api = {
     cloudCreate: invoke('database:cloud-create'),
     cloudMcp: invoke('database:cloud-mcp')
   },
+  pm: {
+    status: invoke('pm:status'),
+    install: invoke('pm:install')
+  },
+  preferences: {
+    path: invoke('preferences:path'),
+    open: invoke('preferences:open')
+  },
 
   on: (channel, handler) => {
     const listener = (_e, payload) => handler(payload)

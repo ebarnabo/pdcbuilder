@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
-import { RefreshCw, Check, FolderOpen, Download, BookOpen } from 'lucide-react'
+import { RefreshCw, Check, FolderOpen, Download, BookOpen, FileText } from 'lucide-react'
 import { Field, ScoreNotes } from './ui.jsx'
 import { GitFields, GitStatus } from './GitFields.jsx'
 import { DatabasePicker } from './DatabaseFields.jsx'
 import { DatabaseAccounts } from './DatabaseCloud.jsx'
+import { PackageManagerPicker } from './PackageManagerPicker.jsx'
 import { api } from './bridge.js'
 
 export default function Settings({ state, refresh, toast, update, docsStatus }) {
@@ -16,6 +17,7 @@ export default function Settings({ state, refresh, toast, update, docsStatus }) 
   const [git, setGit] = useState(state.git || {})
   const [gitStatus, setGitStatus] = useState(null)
   const [databasePref, setDatabasePref] = useState(state.database || { defaultId: 'none' })
+  const [packageManager, setPackageManager] = useState(state.packageManager || 'npm')
 
   useEffect(() => { api.ai.providers().then(setProviders) }, [])
   useEffect(() => { api.git.status().then(setGitStatus) }, [])
@@ -72,6 +74,26 @@ export default function Settings({ state, refresh, toast, update, docsStatus }) 
         <Field label="Commande de l’éditeur" hint="« code » pour VS Code, « cursor » pour Cursor, « subl » pour Sublime.">
           <input className="input mono" value={editor} onChange={(e) => setEditor(e.target.value)} onBlur={() => save({ editor })} />
         </Field>
+        <PackageManagerPicker
+          value={packageManager}
+          onChange={(id) => { setPackageManager(id); save({ packageManager: id }) }}
+          toast={toast}
+        />
+      </div>
+
+      <div className="card">
+        <h4 className="card-title">Préférences pour les agents IA</h4>
+        <p className="card-desc">
+          Tous les réglages (atelier, Git, bases, catalogue, projets) sont exportés en
+          <code> preferences.md</code> et copiés dans chaque projet sous
+          <code> .pdc/preferences.md</code>. L’assistant intégré et les agents externes (Cursor, etc.) peuvent s’y référer.
+          Les secrets (clés API, tokens) ne sont jamais écrits en clair.
+        </p>
+        <div className="row" style={{ justifyContent: 'flex-start' }}>
+          <button className="btn none" onClick={() => api.preferences.open()}>
+            <FileText size={16} /> Ouvrir le dossier
+          </button>
+        </div>
       </div>
 
       <div className="card">
@@ -120,7 +142,7 @@ export default function Settings({ state, refresh, toast, update, docsStatus }) 
         <p className="card-desc">
           Au démarrage, l’app récupère en silence les liens officiels (npm, README, llms.txt, pages docs)
           et les extrait en fichiers Markdown. L’assistant s’en sert ; chaque projet reçoit une copie dans
-          <code> .pdc/docs</code>.
+          <code> .pdc/docs</code>, avec les préférences dans <code>.pdc/preferences.md</code>.
         </p>
         <div className="row" style={{ alignItems: 'center' }}>
           <Field label="Statut">

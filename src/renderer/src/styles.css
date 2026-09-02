@@ -573,6 +573,41 @@ html.lock-scroll .content { overflow: hidden; }
 .db-card strong { display: block; font-size: 13.5px; font-weight: 600; }
 .db-card em { display: block; font-style: normal; font-size: 11.5px; color: var(--text-3); margin-top: 2px; }
 .db-card small { color: var(--text-2); font-size: 12px; line-height: 1.4; }
+
+/* ── gestionnaires de paquets ── */
+.pm-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px;
+}
+.pm-card {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 12px; border-radius: var(--r-md);
+  background: var(--well); box-shadow: inset 0 0 0 1px var(--line);
+  transition: box-shadow 0.22s var(--ease), background 0.22s var(--ease);
+}
+.pm-card.on { box-shadow: inset 0 0 0 1px rgba(240, 163, 94, 0.55); background: rgba(240, 163, 94, 0.06); }
+.pm-card-main {
+  display: flex; flex-direction: column; gap: 8px; text-align: left;
+  color: inherit; font: inherit; border: 0; background: none; padding: 0; width: 100%;
+  cursor: pointer;
+}
+.pm-card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.pm-card-head strong { font-size: 15px; font-weight: 650; letter-spacing: -0.02em; }
+.pm-tag { font-size: 11.5px; color: var(--accent); font-weight: 600; }
+.pm-blurb { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--text-2); }
+.pm-metrics { display: grid; gap: 6px; margin-top: 2px; }
+.pm-metric { display: grid; grid-template-columns: 72px 1fr; align-items: center; gap: 8px; }
+.pm-metric-label { font-size: 11px; color: var(--text-3); }
+.pm-bar {
+  height: 6px; border-radius: 99px; background: rgba(255, 236, 214, 0.08);
+  overflow: hidden; box-shadow: inset 0 0 0 1px var(--line);
+}
+.pm-bar i {
+  display: block; height: 100%; border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), #ffc286);
+  transition: width 0.4s var(--ease-out);
+}
+.pm-install { align-self: flex-start; }
+
 .db-explain {
   margin-top: 10px; padding: 12px 14px;
   background: var(--accent-wash); border-radius: var(--r-md);
