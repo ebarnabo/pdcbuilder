@@ -2,11 +2,14 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import {
   Play, Square, Hammer, FolderOpen, Copy, Trash2, Globe, Plus, Package,
   Code2, Layers, MoreHorizontal, FolderInput, Bookmark, Boxes, ExternalLink,
-  Github, CloudUpload, CloudDownload, Link2, Database
+  Github, CloudUpload, CloudDownload, Link2, Database, Tag
 } from 'lucide-react'
-import { Modal, Menu, Field, SearchBox, LibraryPicker, Empty, bytes, ago, shortPath, Segmented } from './ui.jsx'
+import { Modal, Menu, Field, SearchBox, LibraryPicker, Empty, bytes, ago, shortPath, Segmented, ScoreNotes, Confirm } from './ui.jsx'
 import { GitFields, RepoChip, CloneModal } from './GitFields.jsx'
 import { DatabasePicker } from './DatabaseFields.jsx'
+import { ProvisionToggle } from './DatabaseCloud.jsx'
+import { librariesFor, keepCompatible, filterLibraryItems } from './compat.js'
+import { THEMES, ThemePicker, themeLabel, toggleTheme } from './themes.jsx'
 import { api } from './bridge.js'
 
 export default function Projects({ state, refresh, toast, focusProject }) {
@@ -20,15 +23,21 @@ export default function Projects({ state, refresh, toast, focusProject }) {
   const [repo, setRepo] = useState(null)
   const [db, setDb] = useState(null)
   const [cloning, setCloning] = useState(false)
+  const [themeFilter, setThemeFilter] = useState([])
+  const [themesFor, setThemesFor] = useState(null)
 
   const fwById = useMemo(() => Object.fromEntries(state.frameworks.map((f) => [f.id, f])), [state.frameworks])
 
   const list = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return state.projects.filter(
-      (p) => !q || p.name.toLowerCase().includes(q) || (fwById[p.frameworkId]?.name || '').toLowerCase().includes(q)
-    )
-  }, [state.projects, query, fwById])
+    return state.projects.filter((p) => {
+      if (themeFilter.length && !(p.themes || []).some((t) => themeFilter.includes(t))) return false
+      if (!q) return true
+      if (p.name.toLowerCase().includes(q)) return true
+      if ((fwById[p.frameworkId]?.name || '').toLowerCase().includes(q)) return true
+      return (p.themes || []).some((id) => id.includes(q) || themeLabel(id).toLowerCase().includes(q))
+    })
+  }, [state.projects, query, fwById, themeFilter])
 
   const buildKey = state.projects.map((p) => `${p.id}:${p.lastBuild}`).join()
   useEffect(() => {
@@ -66,16 +75,31 @@ export default function Projects({ state, refresh, toast, focusProject }) {
         <button className="btn primary" onClick={() => setCreating(true)}>
           <Plus size={15} /> Nouveau projet
         </button>
+        {state.projects.length > 0 && (
+          <div className="chip-row" style={{ flexBasis: '100%' }}>
+            {THEMES.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                className={`chip link${themeFilter.includes(t.id) ? ' accent' : ''}`}
+                onClick={() => setThemeFilter((cur) => toggleTheme(cur, t.id))}
+                aria-pressed={themeFilter.includes(t.id)}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {list.length === 0 ? (
         <Empty
           icon={<Boxes size={38} color="var(--accent)" strokeWidth={1.4} />}
-          title={query ? 'Aucun projet ne correspond' : 'Rien à construire pour l’instant'}
-          text={query
-            ? 'Change le filtre pour retrouver un projet.'
+          title={query || themeFilter.length ? 'Aucun projet ne correspond' : 'Rien à construire pour l’instant'}
+          text={query || themeFilter.length
+            ? 'Change le filtre ou les thèmes pour retrouver un projet.'
             : 'Crée un projet, ou clone un dépôt GitHub / Cursor Origin déjà existant.'}
-          action={!query && (
+          action={!(query || themeFilter.length) && (
             <div className="row" style={{ justifyContent: 'center', flexWrap: 'wrap' }}>
               <button className="btn primary" onClick={() => setCreating(true)}><Plus size={15} /> Créer un projet</button>
               <button className="btn" onClick={() => setCloning(true)}><CloudDownload size={15} /> Récupérer un dépôt</button>
@@ -92,6 +116,7 @@ export default function Projects({ state, refresh, toast, focusProject }) {
               framework={fwById[p.frameworkId]}
               build={builds[p.id]}
               onMenu={(el) => setMenu(menu?.id === p.id ? null : { id: p.id, el })}
+              onTheme={(id) => setThemeFilter((cur) => toggleTheme(cur, id))}
               act={act}
               focusProject={focusProject}
             />
@@ -110,6 +135,7 @@ export default function Projects({ state, refresh, toast, focusProject }) {
           onAddLibs={setAddLibs}
           onRepo={setRepo}
           onDatabase={setDb}
+          onThemes={setThemesFor}
           act={act}
         />
       )}
@@ -201,6 +227,14 @@ export default function Projects({ state, refresh, toast, focusProject }) {
         />
       )}
 
+      {themesFor && (
+        <ThemesModal
+          project={themesFor}
+          onClose={() => setThemesFor(null)}
+          act={act}
+        />
+      )}
+
       {del && (
         <Modal
           title={`Supprimer ${del.name} ?`}
@@ -229,7 +263,7 @@ export default function Projects({ state, refresh, toast, focusProject }) {
 
 /* ─────────────────────────  carte projet  ───────────────────────── */
 
-function ProjectCard({ project: p, framework: fw, build, index, onMenu, act, focusProject }) {
+function ProjectCard({ project: p, framework: fw, build, index, onMenu, onTheme, act, focusProject }) {
   const btnRef = useRef(null)
   const busy = p.status === 'scaffolding' || p.status === 'cloning'
   const live = p.status === 'running' || p.status === 'starting'
@@ -257,6 +291,9 @@ function ProjectCard({ project: p, framework: fw, build, index, onMenu, act, foc
 
       <div className="chip-row">
         <span className="chip accent">{fw?.name || 'Framework retiré'}</span>
+        {(p.themes || []).map((id) => (
+          <button type="button" className="chip link" key={id} onClick={() => onTheme(id)}>{themeLabel(id)}</button>
+        ))}
         {p.libs?.length > 0 && <span className="chip"><Package size={11} /> {p.libs.length}</span>}
         {p.databaseId && p.databaseId !== 'none' && (
           <span className="chip"><Database size={11} /> {p.databaseId}</span>
@@ -306,7 +343,7 @@ function ProjectCard({ project: p, framework: fw, build, index, onMenu, act, foc
   )
 }
 
-function ProjectMenu({ project: p, anchor, editor, onClose, onDuplicate, onDelete, onAddLibs, onRepo, onDatabase, act }) {
+function ProjectMenu({ project: p, anchor, editor, onClose, onDuplicate, onDelete, onAddLibs, onRepo, onDatabase, onThemes, act }) {
   if (!p) return null
   const run = (fn) => { onClose(); fn() }
   return (
@@ -326,6 +363,7 @@ function ProjectMenu({ project: p, anchor, editor, onClose, onDuplicate, onDelet
       <hr />
       <button onClick={() => run(() => onAddLibs(p))}><Package size={15} /> Ajouter des librairies</button>
       <button onClick={() => run(() => onDatabase(p))}><Database size={15} /> Configurer la base</button>
+      <button onClick={() => run(() => onThemes(p))}><Tag size={15} /> Thèmes</button>
       <button onClick={() => run(() => onDuplicate(p))}><Copy size={15} /> Dupliquer</button>
       <button onClick={() => run(() => act(() => api.blueprint.fromProject({ id: p.id, name: `Base ${p.name}` }), 'Blueprint créé'))}>
         <Bookmark size={15} /> En faire un blueprint
@@ -344,10 +382,14 @@ function NewProject({ state, onClose, onDone }) {
   const [frameworkId, setFrameworkId] = useState(state.frameworks[0]?.id || '')
   const [blueprintId, setBlueprintId] = useState('')
   const [libs, setLibs] = useState([])
+  const [libQuery, setLibQuery] = useState('')
   const [databaseId, setDatabaseId] = useState(state.database?.defaultId || 'none')
-  const [open, setOpen] = useState(['ui'])
+  const [provision, setProvision] = useState(state.database?.autoCreate !== false)
+  const [cloudReady, setCloudReady] = useState(false)
+  const [open, setOpen] = useState([])
   const [workspace, setWorkspace] = useState(state.workspace)
   const [gitStatus, setGitStatus] = useState(null)
+  const [themes, setThemes] = useState([])
   const [git, setGit] = useState({
     create: saved.autoCreate !== false,
     provider: saved.provider || 'github',
@@ -357,28 +399,50 @@ function NewProject({ state, onClose, onDone }) {
   })
 
   useEffect(() => { api.git.status().then(setGitStatus) }, [])
+  useEffect(() => {
+    api.database.list().then((r) => {
+      setCloudReady(Boolean(r?.cloud?.find((c) => c.id === databaseId)?.ready))
+    }).catch(() => {})
+  }, [databaseId])
 
   const fw = state.frameworks.find((f) => f.id === frameworkId)
+  const compatible = useMemo(() => librariesFor(state.libraries, fw), [state.libraries, fw])
+  const visibleLibs = useMemo(() => filterLibraryItems(compatible, libQuery), [compatible, libQuery])
   const slug = name.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+
+  useEffect(() => {
+    setLibs((l) => keepCompatible(l, state.libraries, fw))
+    setOpen(compatible.slice(0, 2).map((c) => c.id))
+  }, [frameworkId, state.libraries])
 
   const applyBlueprint = (id) => {
     setBlueprintId(id)
+    if (!id) return
     const bp = state.blueprints.find((b) => b.id === id)
-    if (bp) {
-      setFrameworkId(bp.frameworkId)
-      setLibs(bp.libs || [])
-      if (bp.databaseId) setDatabaseId(bp.databaseId)
-    }
+    if (!bp) return
+    const nextFw = state.frameworks.find((f) => f.id === bp.frameworkId)
+    setFrameworkId(bp.frameworkId)
+    setLibs(keepCompatible(bp.libs || [], state.libraries, nextFw))
+    if (bp.databaseId) setDatabaseId(bp.databaseId)
+    setThemes(bp.themes || [])
   }
+
+  const openAll = () => setOpen(visibleLibs.map((c) => c.id))
+  const closeAll = () => setOpen([])
 
   return (
     <Modal
       title="Nouveau projet"
-      subtitle="Framework, base de données, librairies, dossier et dépôt. Le reste est automatique."
+      subtitle="Choisis la stack, les librairies, puis l’emplacement. Le reste est automatique."
       onClose={onClose}
-      width="min(840px, 100%)"
+      width="min(920px, 100%)"
       footer={
         <>
+          <div className="new-project-foot">
+            {themes.map((id) => <span className="chip" key={id}>{themeLabel(id)}</span>)}
+            {fw && <span className="chip accent">{fw.name}</span>}
+            {libs.length > 0 && <span className="chip"><Package size={11} /> {libs.length}</span>}
+          </div>
           <button className="btn ghost" onClick={onClose}>Annuler</button>
           <button className="btn primary" disabled={!slug || !frameworkId}
             onClick={() => onDone({
@@ -386,8 +450,10 @@ function NewProject({ state, onClose, onDone }) {
               frameworkId,
               libs,
               databaseId,
+              provision,
               blueprintId: blueprintId || null,
               workspace,
+              themes,
               git: { ...git, name: git.name.trim() || slug }
             })}>
             <Layers size={15} /> Créer le projet
@@ -395,77 +461,123 @@ function NewProject({ state, onClose, onDone }) {
         </>
       }
     >
-      <div className="row">
-        <Field label="Nom du projet" hint={slug ? `Dossier : ${slug}` : 'Le dossier reprend ce nom, en minuscules.'}>
-          <input className="input" autoFocus placeholder="Portfolio 2026" value={name} onChange={(e) => setName(e.target.value)} />
-        </Field>
-        <Field label="Blueprint">
-          <select className="select" value={blueprintId} onChange={(e) => applyBlueprint(e.target.value)}>
-            <option value="">Partir de zéro</option>
-            {state.blueprints.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-          </select>
-        </Field>
-      </div>
-
-      <Field label="Framework" hint={fw?.description}>
-        <select className="select" value={frameworkId} onChange={(e) => setFrameworkId(e.target.value)}>
-          {state.frameworks.map((f) => <option key={f.id} value={f.id}>{f.name} · {f.tag}</option>)}
-        </select>
-      </Field>
-
-      <DatabasePicker value={databaseId} onChange={setDatabaseId} />
-
-      <Field label="Dossier parent">
+      <section className="form-section">
+        <h4>Identité</h4>
         <div className="row">
-          <input className="input mono" value={workspace} onChange={(e) => setWorkspace(e.target.value)} />
-          <button className="btn none" onClick={async () => { const d = await api.fs.pickDir(); if (d) setWorkspace(d) }}>Choisir</button>
-        </div>
-      </Field>
-
-      <Field label="Dépôt distant" hint="Prérempli depuis Réglages. Change-le seulement pour ce projet.">
-        <Segmented
-          value={git.create ? 'yes' : 'no'}
-          onChange={(v) => setGit({ ...git, create: v === 'yes' })}
-          options={[
-            { value: 'yes', label: 'Créer un dépôt' },
-            { value: 'no', label: 'Pas maintenant' }
-          ]}
-        />
-      </Field>
-      {git.create && (
-        <>
-          <GitFields value={git} onChange={setGit} status={gitStatus} />
-          <Field label="Nom du dépôt" hint={slug ? `Par défaut : ${slug}` : 'Reprend le nom du dossier.'}>
-            <input className="input mono" placeholder={slug || 'mon-projet'} value={git.name} onChange={(e) => setGit({ ...git, name: e.target.value })} />
+          <Field label="Nom du projet" hint={slug ? `Dossier : ${slug}` : 'Le dossier reprend ce nom, en minuscules.'}>
+            <input className="input" autoFocus placeholder="Portfolio 2026" value={name} onChange={(e) => setName(e.target.value)} />
           </Field>
-        </>
-      )}
+          <Field label="Blueprint" hint="Préremplit framework, librairies et base.">
+            <select className="select" value={blueprintId} onChange={(e) => applyBlueprint(e.target.value)}>
+              <option value="">Partir de zéro</option>
+              {state.blueprints.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          </Field>
+        </div>
+        <ThemePicker value={themes} onChange={setThemes} />
+      </section>
 
-      <Field label={libs.length ? `Librairies · ${libs.length} sélectionnées` : 'Librairies'}>
-        <LibraryPicker
-          categories={state.libraries}
-          selected={libs}
-          openIds={open}
-          onToggleGroup={(id) => setOpen((o) => (o.includes(id) ? o.filter((x) => x !== id) : [...o, id]))}
-          onToggle={(pkg) => setLibs((l) => (l.includes(pkg) ? l.filter((x) => x !== pkg) : [...l, pkg]))}
-        />
-      </Field>
+      <section className="form-section">
+        <h4>Stack</h4>
+        <Field label="Framework" hint={fw?.description}>
+          <div className="fw-grid" role="radiogroup" aria-label="Framework">
+            {state.frameworks.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                role="radio"
+                aria-checked={frameworkId === f.id}
+                className={`fw-pick${frameworkId === f.id ? ' on' : ''}`}
+                onClick={() => setFrameworkId(f.id)}
+              >
+                <strong>{f.name}</strong>
+                <span>{f.tag}</span>
+              </button>
+            ))}
+          </div>
+          <ScoreNotes scores={fw?.scores} />
+        </Field>
+        <DatabasePicker value={databaseId} onChange={setDatabaseId} />
+        <ProvisionToggle databaseId={databaseId} ready={cloudReady} value={provision} onChange={setProvision} />
+      </section>
+
+      <section className="form-section form-section-grow">
+        <h4>Librairies</h4>
+        <Field
+          label={libs.length ? `${libs.length} sélectionnée${libs.length > 1 ? 's' : ''}` : 'Catalogue'}
+          hint={fw ? `Filtré pour ${fw.name} — paquets incompatibles masqués.` : undefined}
+        >
+          <LibraryPicker
+            categories={visibleLibs}
+            selected={libs}
+            openIds={open}
+            query={libQuery}
+            onQueryChange={setLibQuery}
+            onOpenAll={openAll}
+            onCloseAll={closeAll}
+            showScores
+            onToggleGroup={(id) => setOpen((o) => (o.includes(id) ? o.filter((x) => x !== id) : [...o, id]))}
+            onToggle={(pkg) => setLibs((l) => (l.includes(pkg) ? l.filter((x) => x !== pkg) : [...l, pkg]))}
+            empty={<p className="card-desc" style={{ margin: 0 }}>Aucun paquet ne correspond à ta recherche.</p>}
+          />
+        </Field>
+      </section>
+
+      <details className="form-advanced">
+        <summary>Emplacement & dépôt distant</summary>
+        <div className="form-advanced-body">
+          <Field label="Dossier parent">
+            <div className="row">
+              <input className="input mono" value={workspace} onChange={(e) => setWorkspace(e.target.value)} />
+              <button type="button" className="btn none" onClick={async () => { const d = await api.fs.pickDir(); if (d) setWorkspace(d) }}>Choisir</button>
+            </div>
+          </Field>
+          <Field label="Dépôt distant" hint="Prérempli depuis Réglages. Change-le seulement pour ce projet.">
+            <Segmented
+              value={git.create ? 'yes' : 'no'}
+              onChange={(v) => setGit({ ...git, create: v === 'yes' })}
+              options={[
+                { value: 'yes', label: 'Créer un dépôt' },
+                { value: 'no', label: 'Pas maintenant' }
+              ]}
+            />
+          </Field>
+          {git.create && (
+            <>
+              <GitFields value={git} onChange={setGit} status={gitStatus} />
+              <Field label="Nom du dépôt" hint={slug ? `Par défaut : ${slug}` : 'Reprend le nom du dossier.'}>
+                <input className="input mono" placeholder={slug || 'mon-projet'} value={git.name} onChange={(e) => setGit({ ...git, name: e.target.value })} />
+              </Field>
+            </>
+          )}
+        </div>
+      </details>
     </Modal>
   )
 }
 
 function AddLibs({ project, state, onClose, onDone }) {
   const [libs, setLibs] = useState([])
-  const cats = state.libraries
-    .map((c) => ({ ...c, items: c.items.filter((i) => !project.libs?.includes(i.pkg)) }))
-    .filter((c) => c.items.length)
-  const [open, setOpen] = useState([cats[0]?.id])
+  const [libQuery, setLibQuery] = useState('')
+  const fw = state.frameworks.find((f) => f.id === project.frameworkId)
+  const cats = useMemo(() => filterLibraryItems(
+    librariesFor(state.libraries, fw)
+      .map((c) => ({ ...c, items: c.items.filter((i) => !project.libs?.includes(i.pkg)) }))
+      .filter((c) => c.items.length),
+    libQuery
+  ), [state.libraries, fw, project.libs, libQuery])
+  const [open, setOpen] = useState([])
+
+  useEffect(() => {
+    setOpen(cats.slice(0, 2).map((c) => c.id))
+  }, [cats.length, fw?.id])
 
   return (
     <Modal
       title={`Ajouter des librairies à ${project.name}`}
-      subtitle="Installation via npm dans le projet existant."
+      subtitle={fw ? `Paquets compatibles avec ${fw.name}, absents de ce projet.` : 'Installation via npm dans le projet existant.'}
       onClose={onClose}
+      width="min(880px, 100%)"
       footer={
         <>
           <button className="btn ghost" onClick={onClose}>Annuler</button>
@@ -479,6 +591,11 @@ function AddLibs({ project, state, onClose, onDone }) {
         categories={cats}
         selected={libs}
         openIds={open}
+        query={libQuery}
+        onQueryChange={setLibQuery}
+        onOpenAll={() => setOpen(cats.map((c) => c.id))}
+        onCloseAll={() => setOpen([])}
+        showScores
         onToggleGroup={(id) => setOpen((o) => (o.includes(id) ? o.filter((x) => x !== id) : [...o, id]))}
         onToggle={(pkg) => setLibs((l) => (l.includes(pkg) ? l.filter((x) => x !== pkg) : [...l, pkg]))}
       />
@@ -550,27 +667,82 @@ function RepoModal({ project, state, onClose, act }) {
 
 function DatabaseModal({ project, onClose, act }) {
   const [databaseId, setDatabaseId] = useState(project.databaseId || 'none')
+  const [provision, setProvision] = useState(true)
+  const [ready, setReady] = useState(false)
+  const [ask, setAsk] = useState(false)
+  useEffect(() => {
+    api.database.list().then((r) => {
+      setReady(Boolean(r?.cloud?.find((c) => c.id === databaseId)?.ready))
+    }).catch(() => {})
+  }, [databaseId])
+
+  const apply = async () => {
+    onClose()
+    await act(
+      () => api.database.apply({ id: project.id, databaseId, provision }),
+      databaseId === 'none' ? 'Aucune base configurée' : `Base ${databaseId} configurée`
+    )
+  }
+
+  const overwrite = project.databaseId && project.databaseId !== 'none' && project.databaseId !== databaseId
+
   return (
+    <>
     <Modal
       title={`Base de données · ${project.name}`}
-      subtitle="Génère le client, .env.example et .pdc/database.md, puis installe le SDK."
+      subtitle="Client, .env, et — si le compte est prêt — création de la base distante."
       onClose={onClose}
       footer={
         <>
           <button className="btn ghost" onClick={onClose}>Annuler</button>
-          <button className="btn primary" onClick={async () => {
-            onClose()
-            await act(
-              () => api.database.apply({ id: project.id, databaseId }),
-              databaseId === 'none' ? 'Aucune base configurée' : `Base ${databaseId} configurée`
-            )
-          }}>
+          <button className="btn primary" onClick={() => (overwrite ? setAsk(true) : apply())}>
             <Database size={15} /> Appliquer
           </button>
         </>
       }
     >
       <DatabasePicker value={databaseId} onChange={setDatabaseId} />
+      <ProvisionToggle databaseId={databaseId} ready={ready} value={provision} onChange={setProvision} />
+    </Modal>
+    {ask && (
+      <Confirm
+        title={`Remplacer ${project.databaseId} ?`}
+        subtitle={`Le client et le .env seront réécrits pour ${databaseId === 'none' ? 'aucune base' : databaseId}.`}
+        confirm="Remplacer"
+        onClose={() => setAsk(false)}
+        onConfirm={apply}
+      />
+    )}
+    </>
+  )
+}
+
+function ThemesModal({ project, onClose, act }) {
+  const [themes, setThemes] = useState(project.themes || [])
+  return (
+    <Modal
+      title={`Thèmes · ${project.name}`}
+      subtitle="Ce que le projet est. Ça sert à filtrer la liste."
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn ghost" onClick={onClose}>Annuler</button>
+          <button
+            className="btn primary"
+            onClick={async () => {
+              onClose()
+              await act(
+                () => api.project.update({ id: project.id, fields: { themes } }),
+                'Thèmes enregistrés'
+              )
+            }}
+          >
+            Enregistrer
+          </button>
+        </>
+      }
+    >
+      <ThemePicker value={themes} onChange={setThemes} />
     </Modal>
   )
 }

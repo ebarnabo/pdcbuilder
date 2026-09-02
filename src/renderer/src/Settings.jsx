@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { RefreshCw, Check, FolderOpen, Download, BookOpen } from 'lucide-react'
-import { Field } from './ui.jsx'
+import { Field, ScoreNotes } from './ui.jsx'
 import { GitFields, GitStatus } from './GitFields.jsx'
 import { DatabasePicker } from './DatabaseFields.jsx'
+import { DatabaseAccounts } from './DatabaseCloud.jsx'
 import { api } from './bridge.js'
 
 export default function Settings({ state, refresh, toast, update, docsStatus }) {
@@ -55,7 +56,7 @@ export default function Settings({ state, refresh, toast, update, docsStatus }) 
       <div className="section-head">
         <div style={{ flex: 1 }}>
           <h3>Réglages</h3>
-          <p>Dossier de travail, dépôts Git, base de données et moteur d’IA.</p>
+          <p>Atelier, dépôts, comptes des bases (CLI / MCP) et moteur d’IA.</p>
         </div>
       </div>
 
@@ -75,10 +76,7 @@ export default function Settings({ state, refresh, toast, update, docsStatus }) 
 
       <div className="card">
         <h4 className="card-title">Application</h4>
-        <p className="card-desc">
-          Un push sur la branche main du dépôt GitHub publie un installeur.
-          L’app le télécharge toute seule ; un clic redémarre sur la nouvelle version.
-        </p>
+        <p className="card-desc">Un push sur main publie l’installeur. L’app le récupère, un clic redémarre.</p>
         <div className="row" style={{ alignItems: 'center' }}>
           <Field label="Version installée">
             <input className="input mono" readOnly value={update?.current || '…'} />
@@ -107,6 +105,11 @@ export default function Settings({ state, refresh, toast, update, docsStatus }) 
           {update?.status === 'ready' && (
             <button className="btn primary" onClick={() => api.app.installUpdate()}>
               <Download size={16} /> Mettre à jour
+            </button>
+          )}
+          {state.onboarding?.completed && (
+            <button className="btn none" onClick={() => save({ onboarding: { ...state.onboarding, completed: false } })}>
+              Relancer l’introduction
             </button>
           )}
         </div>
@@ -162,27 +165,31 @@ export default function Settings({ state, refresh, toast, update, docsStatus }) 
 
       <div className="card">
         <h4 className="card-title">Base de données</h4>
-        <p className="card-desc">
-          Prérempli à chaque nouveau projet. Tu peux encore changer dans la modale de création.
-          SQL + auth → Supabase · Postgres seul → Neon · Google/mobile → Firebase ·
-          self-host BaaS → Appwrite · React réactif → Convex · SQLite local → PocketBase.
-        </p>
+        <p className="card-desc">Choix par défaut, puis les comptes CLI / MCP pour créer et gérer les bases depuis l’app.</p>
         <DatabasePicker
           value={databasePref.defaultId || 'none'}
           onChange={(id) => {
-            const next = { defaultId: id }
+            const next = { ...databasePref, defaultId: id }
             setDatabasePref(next)
             save({ database: next })
           }}
         />
+        <div style={{ marginTop: 20 }}>
+          <h4 className="card-title">Comptes, CLI et MCP</h4>
+          <DatabaseAccounts
+            value={databasePref}
+            onChange={(next) => {
+              setDatabasePref(next)
+              save({ database: next })
+            }}
+            toast={toast}
+          />
+        </div>
       </div>
 
       <div className="card">
         <h4 className="card-title">Intelligence artificielle</h4>
-        <p className="card-desc">
-          Un modèle local reste sur ta machine et fonctionne hors ligne. Une API distante demande une clé,
-          stockée uniquement dans le fichier de configuration de l’application.
-        </p>
+        <p className="card-desc">Local = hors ligne. API = une clé, stockée ici seulement.</p>
 
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {Object.entries(providers).map(([id, p]) => (
@@ -191,6 +198,7 @@ export default function Settings({ state, refresh, toast, update, docsStatus }) 
             </button>
           ))}
         </div>
+        <ScoreNotes scores={providers[ai.provider]?.scores} />
 
         <div className="row">
           <Field label="Adresse du service">

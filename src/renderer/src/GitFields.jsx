@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Github, Cloud, FolderOpen } from 'lucide-react'
 import { Field, Segmented, Modal, SearchBox } from './ui.jsx'
+import { ThemePicker } from './themes.jsx'
 import { api } from './bridge.js'
 
 export function GitFields({ value, onChange, status, showAuto = false }) {
@@ -135,6 +136,7 @@ export function CloneModal({ state, onClose, onDone }) {
   const [selected, setSelected] = useState(null)
   const [folder, setFolder] = useState('')
   const [workspace, setWorkspace] = useState(state.workspace)
+  const [themes, setThemes] = useState([])
 
   useEffect(() => { api.git.status().then(setStatus) }, [])
 
@@ -193,7 +195,8 @@ export function CloneModal({ state, onClose, onDone }) {
                 folder: folder.trim() || undefined,
                 name: folder.trim() || undefined,
                 url: url.trim() || undefined,
-                repo: selected || typedRepo || undefined
+                repo: selected || typedRepo || undefined,
+                themes
               }
               onClose()
               const r = await api.git.clone(payload)
@@ -282,6 +285,8 @@ export function CloneModal({ state, onClose, onDone }) {
           </button>
         </div>
       </Field>
+
+      <ThemePicker value={themes} onChange={setThemes} hint="Facultatif. Tu pourras les changer depuis le menu du projet." />
     </Modal>
   )
 }

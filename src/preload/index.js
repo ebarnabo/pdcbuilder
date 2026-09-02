@@ -64,6 +64,12 @@ const api = {
     checkUpdate: invoke('app:update-check'),
     installUpdate: invoke('app:update-install')
   },
+  window: {
+    minimize: invoke('window:minimize'),
+    toggleMax: invoke('window:toggle-max'),
+    close: invoke('window:close'),
+    isMaximized: invoke('window:is-maximized')
+  },
   docs: {
     status: invoke('docs:status'),
     index: invoke('docs:index'),
@@ -73,7 +79,12 @@ const api = {
   },
   database: {
     list: invoke('database:list'),
-    apply: invoke('database:apply')
+    apply: invoke('database:apply'),
+    cloudStatus: invoke('database:cloud-status'),
+    cloudTest: invoke('database:cloud-test'),
+    cloudList: invoke('database:cloud-list'),
+    cloudCreate: invoke('database:cloud-create'),
+    cloudMcp: invoke('database:cloud-mcp')
   },
 
   on: (channel, handler) => {

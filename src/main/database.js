@@ -10,10 +10,11 @@ export const DATABASES = [
     id: 'none',
     name: 'Pas de base',
     kind: 'Aucun',
-    summary: 'Front uniquement. Tu pourras en brancher une plus tard.',
-    choose: 'Le projet n’a pas encore de données à stocker, ou tu préfères décider après le scaffold.',
-    skip: 'Tu sais déjà que tu auras des comptes, un CMS ou des enregistrements à persister.',
+    summary: 'Front seul. Tu branches plus tard.',
+    choose: 'Pas de données à garder pour l’instant.',
+    skip: 'Tu auras des comptes ou un CMS.',
     features: [],
+    scores: null,
     packages: [],
     docsUrl: null,
     consoleUrl: null
@@ -22,10 +23,16 @@ export const DATABASES = [
     id: 'supabase',
     name: 'Supabase',
     kind: 'Postgres + BaaS',
-    summary: 'Postgres vrai, auth, fichiers et temps réel — le choix SQL le plus complet.',
-    choose: 'Tu veux du SQL, des jointures, Row Level Security, et l’auth + le storage dans le même produit. Open source, tu peux self-host plus tard.',
-    skip: 'Tu n’as besoin que d’un JSON sans SQL, ou tu veux rester 100 % hors ligne sur ta machine.',
-    features: ['Postgres', 'Auth', 'Storage', 'Realtime', 'RLS', 'Open source'],
+    summary: 'SQL, auth, fichiers, temps réel.',
+    choose: 'SQL + auth + fichiers dans un seul produit.',
+    skip: 'JSON simple, ou 100 % local.',
+    features: ['Postgres', 'Auth', 'Storage', 'Realtime'],
+    scores: {
+      perf: { n: 4, note: 'Postgres indexé, RLS. Compute partagé en free.' },
+      free: { n: 4, note: '500 Mo · 50k MAU · 2 projets · pause 7 j.' },
+      paid: { n: 5, note: 'Pro ~25 $/mois + usage. Self-host sans plafond.' },
+      exit: { n: 3, note: 'Un perso tient. Une prod (egress, disque) passe Pro.' }
+    },
     packages: ['@supabase/supabase-js'],
     extraNext: ['@supabase/ssr'],
     docsUrl: 'https://supabase.com/docs',
@@ -35,10 +42,16 @@ export const DATABASES = [
     id: 'firebase',
     name: 'Firebase',
     kind: 'BaaS Google',
-    summary: 'Firestore, Auth et Storage chez Google. Très fort en temps réel et mobile.',
-    choose: 'Tu vises une app temps réel, tu prévois iOS/Android après le web, et l’écosystème Google te va.',
-    skip: 'Tu as besoin de SQL / Postgres, d’un self-host, ou d’éviter le lock-in Google et la facturation Blaze.',
-    features: ['Firestore', 'Auth', 'Storage', 'Realtime', 'Hosting', 'Mobile'],
+    summary: 'NoSQL, temps réel, mobile.',
+    choose: 'App live + iOS/Android ensuite.',
+    skip: 'SQL, self-host, ou facture Blaze à éviter.',
+    features: ['Firestore', 'Auth', 'Realtime', 'Mobile'],
+    scores: {
+      perf: { n: 4, note: 'Temps réel excellent. Requêtes complexes limitées.' },
+      free: { n: 3, note: 'Spark : 50k lectures/j. Plus de Storage en free (2026).' },
+      paid: { n: 5, note: 'Blaze à l’usage, scale Google. Coût vite imprévisible.' },
+      exit: { n: 5, note: 'Les caps journaliers poussent vers Blaze très tôt.' }
+    },
     packages: ['firebase'],
     docsUrl: 'https://firebase.google.com/docs',
     consoleUrl: 'https://console.firebase.google.com'
@@ -47,10 +60,16 @@ export const DATABASES = [
     id: 'neon',
     name: 'Neon',
     kind: 'Postgres serverless',
-    summary: 'Postgres managé, branches comme Git, scale-to-zero. Tu apportes l’auth.',
-    choose: 'Tu veux du SQL sérieux (Drizzle, Prisma) sans gérer un serveur, et tu branches l’auth à part (Better Auth, Clerk…).',
-    skip: 'Tu n’as que du front Vite sans serveur : le mot de passe Postgres ne doit jamais aller dans le navigateur. Prends Next/Nuxt, ou un BaaS.',
-    features: ['Postgres', 'Serverless', 'Branching', 'Drizzle / Prisma', 'Serveur only'],
+    summary: 'Postgres. Auth à part.',
+    choose: 'SQL (Drizzle/Prisma) sans gérer un serveur.',
+    skip: 'Front Vite seul : le mot de passe ne va pas au client.',
+    features: ['Postgres', 'Serverless', 'Branches', 'Serveur'],
+    scores: {
+      perf: { n: 4, note: 'Postgres sérieux. Cold start si scale-to-zero.' },
+      free: { n: 4, note: '0,5 Go · 100 h compute · 100 projets · pas de pause.' },
+      paid: { n: 4, note: 'Launch peu cher, compute à l’usage. Pas d’auth incluse.' },
+      exit: { n: 3, note: 'Toujours allumé : les heures compute partent vite.' }
+    },
     packages: ['@neondatabase/serverless', 'drizzle-orm'],
     extraDev: ['drizzle-kit'],
     docsUrl: 'https://neon.tech/docs',
@@ -60,10 +79,16 @@ export const DATABASES = [
     id: 'appwrite',
     name: 'Appwrite',
     kind: 'BaaS open source',
-    summary: 'Auth, base, fichiers, functions — comme Firebase, mais self-host possible.',
-    choose: 'Tu veux un backend tout-en-un, open source, RGPD / self-host, sans passer par Google.',
-    skip: 'Tu tiens à du Postgres SQL natif (requêtes SQL brutes, migrations Drizzle). Préfère Supabase ou Neon.',
-    features: ['Auth', 'Database', 'Storage', 'Functions', 'Self-host', 'Cloud'],
+    summary: 'Auth, base, fichiers. Self-host ok.',
+    choose: 'BaaS tout-en-un, sans Google.',
+    skip: 'SQL Postgres natif (Drizzle, jointures).',
+    features: ['Auth', 'Base', 'Storage', 'Self-host'],
+    scores: {
+      perf: { n: 3, note: 'Solide en BaaS. Moins à l’aise que du SQL brut.' },
+      free: { n: 5, note: 'Cloud : 75k MAU · 2 Go · 5 Go bande. Self-host illimité.' },
+      paid: { n: 4, note: 'Cloud Pro + usage. VPS = toi qui paies la machine.' },
+      exit: { n: 2, note: 'Cloud généreux. Self-host : tu ne sors jamais du free.' }
+    },
     packages: ['appwrite'],
     docsUrl: 'https://appwrite.io/docs',
     consoleUrl: 'https://cloud.appwrite.io'
@@ -72,10 +97,16 @@ export const DATABASES = [
     id: 'convex',
     name: 'Convex',
     kind: 'Backend réactif',
-    summary: 'Queries/mutations TypeScript, sync live. Pensé pour React et Next.',
-    choose: 'Stack React/Next, tu veux un backend typé qui pousse les updates tout seul, sans écrire de SQL.',
-    skip: 'Projet Vue/Svelte/vanilla, besoin de SQL, ou tu refuses un backend propriétaire.',
-    features: ['TypeScript', 'Realtime', 'React/Next', 'Auth plugin', 'Sans SQL'],
+    summary: 'TypeScript live. React / Next.',
+    choose: 'React/Next, sync auto, zéro SQL.',
+    skip: 'Vue, Svelte, SQL, ou lock-in à éviter.',
+    features: ['TypeScript', 'Realtime', 'React', 'Sans SQL'],
+    scores: {
+      perf: { n: 5, note: 'Mutations typées, UI à jour toute seule.' },
+      free: { n: 4, note: '1 M appels/mois · 0,5 Go · 1 Go fichiers.' },
+      paid: { n: 4, note: 'À l’appel. Monte avec le live sync.' },
+      exit: { n: 4, note: '1 M d’appels part vite dès que ça sync en continu.' }
+    },
     packages: ['convex'],
     docsUrl: 'https://docs.convex.dev',
     consoleUrl: 'https://dashboard.convex.dev'
@@ -84,10 +115,16 @@ export const DATABASES = [
     id: 'pocketbase',
     name: 'PocketBase',
     kind: 'SQLite self-host',
-    summary: 'Un binaire : API, auth, admin, SQLite. Idéal en local et petits déploiements.',
-    choose: 'Prototype, outil interne, self-host simple, zéro cloud obligatoire. Tu lances `pocketbase serve` et c’est tout.',
-    skip: 'Tu vises un scale mondial, du serverless multi-région, ou une équipe qui exige Postgres managé.',
-    features: ['SQLite', 'Auth', 'Admin UI', 'Realtime', 'Un binaire', 'Self-host'],
+    summary: 'Un binaire. Local ou petit VPS.',
+    choose: 'Proto, outil interne, zéro cloud.',
+    skip: 'Scale mondial ou Postgres managé.',
+    features: ['SQLite', 'Auth', 'Admin', 'Un binaire'],
+    scores: {
+      perf: { n: 4, note: 'SQLite très vif en local. Un seul nœud.' },
+      free: { n: 5, note: 'Toujours gratuit. Tu héberges le binaire.' },
+      paid: { n: 2, note: 'Pas de plan vendor. Un VPS si tu sors de ta machine.' },
+      exit: { n: 1, note: 'Tu ne « sors » du free que le jour où tu veux du multi-région.' }
+    },
     packages: ['pocketbase'],
     docsUrl: 'https://pocketbase.io/docs',
     consoleUrl: 'https://pocketbase.io'
@@ -95,12 +132,12 @@ export const DATABASES = [
 ]
 
 export const GUIDE = [
-  { match: 'SQL + auth + fichiers, open source', id: 'supabase' },
-  { match: 'Postgres seul, tu gères l’auth', id: 'neon' },
-  { match: 'Temps réel + mobile Google', id: 'firebase' },
-  { match: 'BaaS self-host, pas Google', id: 'appwrite' },
-  { match: 'React/Next réactif, sans SQL', id: 'convex' },
-  { match: 'Local / petit self-host SQLite', id: 'pocketbase' }
+  { match: 'SQL + auth + fichiers', id: 'supabase' },
+  { match: 'Postgres, auth à part', id: 'neon' },
+  { match: 'Temps réel + mobile', id: 'firebase' },
+  { match: 'BaaS self-host', id: 'appwrite' },
+  { match: 'React live, sans SQL', id: 'convex' },
+  { match: 'Local / petit VPS', id: 'pocketbase' }
 ]
 
 export function list() {
@@ -111,14 +148,14 @@ export function byId(id) {
   return DATABASES.find((d) => d.id === id) || DATABASES[0]
 }
 
-function envStyle(frameworkId) {
+export function envStyle(frameworkId) {
   if (frameworkId === 'next') return 'next'
   if (frameworkId === 'nuxt') return 'nuxt'
   if (frameworkId === 'astro' || frameworkId === 'sveltekit') return 'public'
   return 'vite'
 }
 
-function pubKey(style, name) {
+export function pubKey(style, name) {
   if (style === 'next') return `NEXT_PUBLIC_${name}`
   if (style === 'nuxt') return `NUXT_PUBLIC_${name}`
   if (style === 'public') return `PUBLIC_${name}`
@@ -277,9 +314,17 @@ ${db.summary}
 
 ## Pourquoi ce choix
 
-**À prendre si** ${db.choose}
+**Si** ${db.choose}
 
-**À éviter si** ${db.skip}
+**Pas si** ${db.skip}
+
+${db.scores ? `## Notes
+
+- **Perf** ${db.scores.perf.n}/5 — ${db.scores.perf.note}
+- **Gratuit** ${db.scores.free.n}/5 — ${db.scores.free.note}
+- **Payant** ${db.scores.paid.n}/5 — ${db.scores.paid.note}
+- **Sortie free** ${db.scores.exit.n}/5 — ${db.scores.exit.note}
+` : ''}
 
 Framework du projet : \`${frameworkId}\`.
 
@@ -377,4 +422,28 @@ export function writeFiles(root, databaseId, frameworkId) {
 
 export function relativeFiles(root, files) {
   return files.map((f) => f.slice(root.length).replace(/^[\\/]/, '').replace(/\\/g, '/'))
+}
+
+/** Écrit les vraies valeurs dans .env et .env.example. public = préfixé VITE_/NEXT_PUBLIC_, secret = tel quel. */
+export function applyEnvValues(root, frameworkId, { public: pub = {}, secret = {} } = {}) {
+  const style = envStyle(frameworkId)
+  const rows = [
+    ...Object.entries(pub).map(([k, v]) => [pubKey(style, k), v]),
+    ...Object.entries(secret).map(([k, v]) => [k, v])
+  ].filter(([, v]) => v != null && String(v) !== '')
+  if (!rows.length) return []
+  const written = []
+  for (const file of ['.env.example', '.env']) {
+    const path = join(root, file)
+    let text = existsSync(path) ? readFileSync(path, 'utf8') : ''
+    for (const [key, value] of rows) {
+      const line = `${key}=${value}`
+      const re = new RegExp(`^${key}=.*$`, 'm')
+      text = re.test(text) ? text.replace(re, line) : `${text.replace(/\s*$/, '')}\n${line}\n`
+    }
+    writeFile(path, text.endsWith('\n') ? text : `${text}\n`)
+    written.push(path)
+  }
+  ensureGitignore(root)
+  return written
 }

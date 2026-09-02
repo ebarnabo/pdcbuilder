@@ -20,37 +20,96 @@ const fw = (id, name, tag, description, create, extra = {}) => ({
   ...extra
 })
 
+const oss = (perfNote) => ({
+  perf: { n: 5, note: perfNote },
+  free: { n: 5, note: 'OSS. Zéro licence.' },
+  paid: { n: 2, note: 'Tu paies l’hébergeur, pas le framework.' },
+  exit: { n: 1, note: 'Le framework reste gratuit.' }
+})
+
 export const DEFAULT_FRAMEWORKS = [
-  fw('vite-react', 'Vite + React', 'React', 'SPA rapide, TypeScript, HMR instantané. Le choix par défaut pour une interface riche.',
-    'npm create vite@latest {{name}} -- --template react-ts'),
-  fw('vite-vue', 'Vite + Vue', 'Vue', 'SPA Vue 3 avec <script setup> et TypeScript.',
-    'npm create vite@latest {{name}} -- --template vue-ts'),
-  fw('vite-svelte', 'Vite + Svelte', 'Svelte', 'Compilé, sans runtime lourd. Idéal pour les interfaces animées légères.',
-    'npm create vite@latest {{name}} -- --template svelte-ts'),
-  fw('vite-vanilla', 'Vite + Vanilla', 'JS', 'Zéro framework, TypeScript et bundling moderne. Parfait pour un prototype ou une PWA.',
-    'npm create vite@latest {{name}} -- --template vanilla-ts'),
-  fw('next', 'Next.js', 'React', 'App Router, rendu serveur, routes API. Pour un site avec SEO et back-end intégré.',
+  fw('vite-react', 'Vite + React', 'React', 'SPA, TypeScript, HMR.',
+    'npm create vite@latest {{name}} -- --template react-ts', {
+      family: 'react',
+      scores: oss('HMR instantané, bundle SPA léger.')
+    }),
+  fw('vite-vue', 'Vite + Vue', 'Vue', 'SPA Vue 3, TypeScript.',
+    'npm create vite@latest {{name}} -- --template vue-ts', {
+      family: 'vue',
+      scores: oss('HMR instantané, <script setup>.')
+    }),
+  fw('vite-svelte', 'Vite + Svelte', 'Svelte', 'Compilé, runtime mince.',
+    'npm create vite@latest {{name}} -- --template svelte-ts', {
+      family: 'svelte',
+      scores: oss('Compilé : presque pas de runtime.')
+    }),
+  fw('vite-vanilla', 'Vite + Vanilla', 'JS', 'TypeScript, zéro framework.',
+    'npm create vite@latest {{name}} -- --template vanilla-ts', {
+      family: 'vanilla',
+      scores: oss('Le plus léger. Tu écris tout.')
+    }),
+  fw('next', 'Next.js', 'React', 'SSR, App Router, API.',
     'npx --yes create-next-app@latest {{name}} --ts --tailwind --eslint --app --src-dir --use-npm --no-import-alias --no-turbopack',
-    { outDir: '.next', preview: 'npm run start' }),
-  fw('astro', 'Astro', 'Contenu', 'Sites de contenu ultra-légers, îlots interactifs à la demande.',
-    'npm create astro@latest {{name}} -- --template minimal --typescript strict --no-install --no-git --skip-houston'),
-  fw('sveltekit', 'SvelteKit', 'Svelte', 'Full-stack Svelte : routing fichier, endpoints, adaptateurs de déploiement.',
+    {
+      outDir: '.next', preview: 'npm run start', family: 'react',
+      scores: {
+        perf: { n: 4, note: 'SSR et RSC. Plus lourd qu’une SPA Vite.' },
+        free: { n: 5, note: 'OSS. Hobby Vercel / autre hôte ok.' },
+        paid: { n: 4, note: 'Vercel Pro, serveur, bande passante.' },
+        exit: { n: 3, note: 'Le Hobby Vercel sature avant le framework.' }
+      }
+    }),
+  fw('astro', 'Astro', 'Contenu', 'HTML statique, îlots JS.',
+    'npm create astro@latest {{name}} -- --template minimal --typescript strict --no-install --no-git --skip-houston',
+    { family: 'astro', scores: oss('Pages statiques, JS à la demande.') }),
+  fw('sveltekit', 'SvelteKit', 'Svelte', 'Full-stack Svelte.',
     'npx --yes sv create {{name}} --template minimal --types ts --no-add-ons --no-install',
-    { outDir: 'build' }),
-  fw('nuxt', 'Nuxt', 'Vue', 'Full-stack Vue avec rendu hybride et auto-imports.',
+    {
+      outDir: 'build', family: 'svelte',
+      scores: {
+        perf: { n: 4, note: 'SSR compilé, adaptateurs au choix.' },
+        free: { n: 5, note: 'OSS.' },
+        paid: { n: 3, note: 'Tu paies l’hôte (Node, edge, statique).' },
+        exit: { n: 2, note: 'Le kit reste gratuit. L’hôte, ça dépend.' }
+      }
+    }),
+  fw('nuxt', 'Nuxt', 'Vue', 'Full-stack Vue, auto-imports.',
     'npx --yes nuxi@latest init {{name}} --packageManager npm --no-install --gitInit false',
-    { outDir: '.output' }),
-  fw('electron-react', 'Electron + React', 'Desktop', 'Application de bureau Mac/Windows avec Vite et React.',
+    {
+      outDir: '.output', family: 'vue',
+      scores: {
+        perf: { n: 4, note: 'SSR hybride, auto-imports.' },
+        free: { n: 5, note: 'OSS.' },
+        paid: { n: 3, note: 'NuxtHub / hôte Node. Pas le framework.' },
+        exit: { n: 2, note: 'Le framework reste gratuit.' }
+      }
+    }),
+  fw('electron-react', 'Electron + React', 'Desktop', 'App bureau Mac / Windows.',
     'npm create --yes @quick-start/electron@latest {{name}} -- --template react-ts',
-    { outDir: 'dist', preview: 'npm run start' })
+    {
+      outDir: 'dist', preview: 'npm run start', family: 'react',
+      scores: {
+        perf: { n: 3, note: 'Chromium embarqué. Plus lourd qu’un site.' },
+        free: { n: 5, note: 'OSS. Tu buildes chez toi.' },
+        paid: { n: 2, note: 'Stores : 15–30 % si tu vends.' },
+        exit: { n: 1, note: 'Pas de plafond cloud. C’est un binaire.' }
+      }
+    })
 ]
 
-const lib = (name, pkg, description, dev = false) => ({ id: pkg, name, pkg, description, dev })
+function brief(s) {
+  if (!s) return ''
+  const cut = String(s).split(/\s+[—–]\s+|:\s+/)[0].trim().replace(/[.]+$/, '')
+  if (cut.length <= 54) return cut
+  return cut.slice(0, 52).replace(/\s+\S*$/, '')
+}
+
+const lib = (name, pkg, description, dev = false) => ({ id: pkg, name, pkg, description: brief(description), dev })
 
 export const DEFAULT_LIBRARIES = [
   {
     id: 'ui', name: 'Interface & composants',
-    description: 'Bases visuelles, primitives accessibles et systèmes de style.',
+    description: 'Style, primitives, composants.',
     items: [
       lib('Tailwind CSS', 'tailwindcss', 'Utilitaires CSS, thème centralisé, purge automatique.', true),
       lib('Radix UI', '@radix-ui/react-dialog', 'Primitives non stylées et accessibles : modales, menus, popovers.'),
@@ -80,7 +139,7 @@ export const DEFAULT_LIBRARIES = [
   },
   {
     id: 'react', name: 'React & Next',
-    description: 'Kits de composants pour React et Next.js : design systems, primitives headless et docs.',
+    description: 'Kits React et Next.',
     items: [
       lib('MUI', '@mui/material', 'Material Design pour React : 100+ composants, thèmes, MUI X.'),
       lib('Mantine', '@mantine/core', 'Suite complète, hooks, style props, très à l’aise avec Next.'),
@@ -108,7 +167,7 @@ export const DEFAULT_LIBRARIES = [
   },
   {
     id: 'vue', name: 'Vue & Nuxt',
-    description: 'Kits de composants pour Vue 3 et Nuxt : design systems, primitives headless et modules UI.',
+    description: 'Kits Vue et Nuxt.',
     items: [
       lib('Nuxt UI', '@nuxt/ui', 'Kit officiel Nuxt/Vue : 120+ composants, Reka UI, Tailwind, thèmes.'),
       lib('Reka UI', 'reka-ui', 'Primitives headless accessibles (ex-Radix Vue) : modales, menus, focus.'),
@@ -135,7 +194,7 @@ export const DEFAULT_LIBRARIES = [
   },
   {
     id: 'landing', name: 'Design 2026',
-    description: 'Landing, motion, shaders et registres shadcn : le polish visuel du moment.',
+    description: 'Landing, motion, shaders.',
     items: [
       lib('Magic UI', 'magicui-cli', '150+ composants animés shadcn : marquee, bento, shine, beams.', true),
       lib('Aceternity UI', 'aceternity-ui', 'Effets 3D, spotlights, cartes lumineuses — le wow des landings SaaS.', true),
@@ -163,7 +222,7 @@ export const DEFAULT_LIBRARIES = [
   },
   {
     id: 'design', name: 'Design visuel',
-    description: 'Icônes, typographie, couleur, illustration et micro-détails d’interface.',
+    description: 'Icônes, typos, couleur.',
     items: [
       lib('Phosphor Icons', '@phosphor-icons/react', 'Famille d’icônes à six graisses, très lisible en petit.'),
       lib('Tabler Icons', '@tabler/icons-react', 'Trait fin, grille régulière, couvre presque tous les usages produit.'),
@@ -188,7 +247,7 @@ export const DEFAULT_LIBRARIES = [
   },
   {
     id: 'motion', name: 'Animation & mouvement',
-    description: 'Transitions, gestes et défilement animé à 60 fps.',
+    description: 'Transitions et scroll.',
     items: [
       lib('Motion (Framer)', 'framer-motion', 'Ancien nom encore vu partout. Préfère le paquet « motion ».'),
       lib('Motion', 'motion', 'Le paquet actuel : mêmes APIs, layout animations, gestes, spring.'),
@@ -223,7 +282,7 @@ export const DEFAULT_LIBRARIES = [
   },
   {
     id: 'state', name: 'État & données',
-    description: 'Stockage local, cache réseau et synchronisation serveur.',
+    description: 'Store, cache, sync.',
     items: [
       lib('Zustand', 'zustand', 'Store minimal, sans boilerplate ni provider.'),
       lib('TanStack Query', '@tanstack/react-query', 'Cache, revalidation et états de chargement du réseau.'),
@@ -238,7 +297,7 @@ export const DEFAULT_LIBRARIES = [
   },
   {
     id: 'forms', name: 'Formulaires & validation',
-    description: 'Saisie contrôlée, schémas et messages d\'erreur.',
+    description: 'Saisie et schémas.',
     items: [
       lib('React Hook Form', 'react-hook-form', 'Formulaires performants, peu de re-rendus.'),
       lib('Zod', 'zod', 'Schémas TypeScript avec inférence de types.'),
@@ -249,17 +308,15 @@ export const DEFAULT_LIBRARIES = [
   },
   {
     id: 'backend', name: 'Back-end & base de données',
-    description: 'Auth, stockage, requêtes et ORM.',
+    description: 'ORM, HTTP, auth, paiements.',
     items: [
       lib('Supabase', '@supabase/supabase-js', 'Postgres, auth, storage et temps réel en une clé.'),
       lib('Prisma', 'prisma', 'ORM typé avec migrations et studio.', true),
       lib('Drizzle', 'drizzle-orm', 'ORM SQL léger, proche du langage.'),
       lib('Axios', 'axios', 'Client HTTP avec intercepteurs.'),
-      lib('Better Auth', 'better-auth', 'Authentification complète côté serveur.'),
       lib('Hono', 'hono', 'API ultra-légère, Edge, Node et workers.'),
       lib('tRPC', '@trpc/client', 'RPC bout-en-bout typé, plus de contrat OpenAPI à tenir.'),
       lib('ky', 'ky', 'Fetch moderne : timeout, retry, JSON, sans Axios.'),
-      lib('Auth.js', 'next-auth', 'Sessions, OAuth et magic links, Next et au-delà.'),
       lib('Stripe', 'stripe', 'Paiements, webhooks et factures côté serveur.'),
       lib('Stripe.js', '@stripe/stripe-js', 'Checkout et Elements dans le navigateur.'),
       lib('Resend', 'resend', 'E-mails transactionnels, React Email, DNS propre.'),
@@ -270,7 +327,7 @@ export const DEFAULT_LIBRARIES = [
   },
   {
     id: 'auth', name: 'Authentification',
-    description: 'Login, sessions, OAuth, passkeys, SSO et identity providers.',
+    description: 'Login, OAuth, passkeys, SSO.',
     items: [
       lib('Better Auth', 'better-auth', 'Auth full-stack 2026 : email, OAuth, 2FA, organisations, plugins.'),
       lib('Better Auth Passkey', '@better-auth/passkey', 'Passkeys branchées sur Better Auth, WebAuthn sans la plomberie.'),
@@ -314,7 +371,7 @@ export const DEFAULT_LIBRARIES = [
   },
   {
     id: '3d', name: '3D, canvas & jeux',
-    description: 'Rendu temps réel, canvas 2D et helpers Three de base.',
+    description: 'Three, canvas, 2D.',
     items: [
       lib('Three.js', 'three', 'Moteur 3D WebGL de référence.'),
       lib('React Three Fiber', '@react-three/fiber', 'Three.js en composants React.'),
@@ -327,7 +384,7 @@ export const DEFAULT_LIBRARIES = [
   },
   {
     id: 'game3d', name: 'Jeu vidéo 3D',
-    description: 'Moteurs, physique, IA, netcode et assets pour des jeux 3D dans le navigateur.',
+    description: 'Moteurs, physique, netcode.',
     items: [
       lib('Babylon.js', '@babylonjs/core', 'Moteur 3D complet : scènes, PBR, animations, WebGPU, outillage jeu.'),
       lib('Havok', '@babylonjs/havok', 'Physique AAA de Microsoft, branchée sur Babylon : rigidbodies, constraints.'),
@@ -364,7 +421,7 @@ export const DEFAULT_LIBRARIES = [
   },
   {
     id: 'dataviz', name: 'Graphiques & données',
-    description: 'Visualisation et tableaux.',
+    description: 'Charts et tableaux.',
     items: [
       lib('Recharts', 'recharts', 'Graphiques composables construits sur D3.'),
       lib('D3', 'd3', 'Contrôle total sur la représentation des données.'),
@@ -376,7 +433,7 @@ export const DEFAULT_LIBRARIES = [
   },
   {
     id: 'routing', name: 'Navigation',
-    description: 'Routage client et transitions de page.',
+    description: 'Routes client.',
     items: [
       lib('React Router', 'react-router-dom', 'Routage déclaratif, loaders et actions.'),
       lib('TanStack Router', '@tanstack/react-router', 'Routage typé de bout en bout.')
@@ -384,7 +441,7 @@ export const DEFAULT_LIBRARIES = [
   },
   {
     id: 'pwa', name: 'PWA & hors ligne',
-    description: 'Installation, cache et stockage local.',
+    description: 'Install, cache, hors ligne.',
     items: [
       lib('Vite PWA', 'vite-plugin-pwa', 'Manifest, service worker et mise à jour automatique.', true),
       lib('Workbox Window', 'workbox-window', 'Contrôle fin du cycle de vie du service worker.'),
@@ -393,7 +450,7 @@ export const DEFAULT_LIBRARIES = [
   },
   {
     id: 'content', name: 'Contenu & SEO',
-    description: 'Markdown, métadonnées et coloration syntaxique.',
+    description: 'Markdown, SEO, éditeurs.',
     items: [
       lib('Gray Matter', 'gray-matter', 'Lecture du front-matter des fichiers Markdown.'),
       lib('Marked', 'marked', 'Conversion Markdown vers HTML.'),
@@ -410,7 +467,7 @@ export const DEFAULT_LIBRARIES = [
   },
   {
     id: 'quality', name: 'Qualité & tests',
-    description: 'Lint, format et tests automatisés.',
+    description: 'Lint, format, tests.',
     items: [
       lib('Vitest', 'vitest', 'Tests unitaires rapides, compatibles Vite.', true),
       lib('Testing Library', '@testing-library/react', 'Tests centrés sur l\'usage réel des composants.', true),
@@ -427,7 +484,7 @@ export const DEFAULT_LIBRARIES = [
   },
   {
     id: 'utils', name: 'Utilitaires',
-    description: 'Petites briques utilisées partout.',
+    description: 'Dates, IDs, classes.',
     items: [
       lib('date-fns', 'date-fns', 'Manipulation de dates modulaire.'),
       lib('clsx', 'clsx', 'Composition de classes conditionnelles.'),
@@ -446,7 +503,7 @@ export const DEFAULT_LIBRARIES = [
   },
   {
     id: 'i18n', name: 'Internationalisation',
-    description: 'Langues, locales et messages.',
+    description: 'Langues et locales.',
     items: [
       lib('i18next', 'i18next', 'Moteur i18n : pluriels, namespaces, détection.'),
       lib('React i18next', 'react-i18next', 'Hooks et Suspense pour i18next dans React.'),
@@ -455,7 +512,7 @@ export const DEFAULT_LIBRARIES = [
   },
   {
     id: 'ai', name: 'IA & modèles',
-    description: 'SDK pour chat, embeddings et outils.',
+    description: 'Chat, embeddings, tools.',
     items: [
       lib('Vercel AI SDK', 'ai', 'Streaming, tools et UI de chat, tous fournisseurs.'),
       lib('AI SDK React', '@ai-sdk/react', 'useChat, useCompletion, le pont React du SDK.'),
@@ -464,7 +521,7 @@ export const DEFAULT_LIBRARIES = [
   },
   {
     id: 'media', name: 'Média & fichiers',
-    description: 'Vidéo, images, PDF et capture. Le son a sa propre catégorie.',
+    description: 'Vidéo, images, PDF.',
     items: [
       lib('Howler', 'howler', 'Audio web : sprites, fade, Web Audio et HTML5.'),
       lib('hls.js', 'hls.js', 'Lecture HLS dans le navigateur, live et VOD.'),
@@ -476,7 +533,7 @@ export const DEFAULT_LIBRARIES = [
   },
   {
     id: 'audio', name: 'Son & audio',
-    description: 'Lecture, synthèse, spatialisation, analyse, MIDI et voix dans le navigateur.',
+    description: 'Lecture, synthé, MIDI, voix.',
     items: [
       lib('Tone.js', 'tone', 'DAW dans le browser : synthés, effets, transport, timing musical.'),
       lib('use-sound', 'use-sound', 'Hook React pour Howler : SFX UI, sprites, volume, un clic.'),
@@ -512,7 +569,7 @@ export const DEFAULT_LIBRARIES = [
   },
   {
     id: 'realtime', name: 'Temps réel & collab',
-    description: 'Sockets, présence et documents partagés.',
+    description: 'Sockets et CRDT.',
     items: [
       lib('Socket.IO', 'socket.io-client', 'WebSocket avec fallback, salles et reconnexion.'),
       lib('Yjs', 'yjs', 'CRDT : un même document édité à plusieurs, sans conflit.')
@@ -520,7 +577,7 @@ export const DEFAULT_LIBRARIES = [
   },
   {
     id: 'security', name: 'Sécurité',
-    description: 'Headers, bots, secrets, XSS, authz et durcissement d’application.',
+    description: 'Headers, bots, secrets, XSS.',
     items: [
       lib('Helmet', 'helmet', 'En-têtes HTTP : CSP, HSTS, X-Frame, nosniff — la base Node.'),
       lib('next-safe', 'next-safe', 'Headers de sécurité pour Next : CSP, Referrer, Permissions-Policy.'),
@@ -583,7 +640,7 @@ export const DEFAULT_LIBRARIES = [
   },
   {
     id: 'observability', name: 'Observabilité',
-    description: 'Erreurs, produit et perf en production.',
+    description: 'Crashes et analytics.',
     items: [
       lib('Sentry', '@sentry/react', 'Crashes, traces et session replay.'),
       lib('PostHog', 'posthog-js', 'Analytics, feature flags et replays, auto-hébergeable.')
@@ -614,11 +671,46 @@ export const DEFAULTS = {
     branch: 'main'
   },
   database: {
-    defaultId: 'none'
+    defaultId: 'none',
+    autoCreate: true,
+    accounts: {
+      supabase: { token: '', orgId: '', region: 'eu-west-1' },
+      firebase: { token: '' },
+      neon: { apiKey: '' },
+      appwrite: { endpoint: 'https://cloud.appwrite.io/v1', apiKey: '', projectId: '' },
+      convex: { deployKey: '', url: '' },
+      pocketbase: { url: 'http://127.0.0.1:8090', binary: '' }
+    }
+  },
+  onboarding: {
+    completed: false,
+    version: 1,
+    skipped: []
   }
 }
 
 let cache = null
+
+function mergeFrameworks(saved, defaults) {
+  if (!saved?.length) return structuredClone(defaults)
+  const byId = new Map(defaults.map((f) => [f.id, f]))
+  const seen = new Set()
+  const next = []
+  for (const f of saved) {
+    const d = byId.get(f.id)
+    const merged = { ...d, ...f, family: f.family || d?.family }
+    if (d) {
+      merged.description = d.description
+      if (d.scores) merged.scores = d.scores
+    }
+    next.push(merged)
+    seen.add(f.id)
+  }
+  for (const f of defaults) {
+    if (!seen.has(f.id)) next.push(structuredClone(f))
+  }
+  return next
+}
 
 function mergeLibraries(saved, defaults) {
   const byId = new Map((saved || []).map((c) => [c.id, { ...c, items: [...(c.items || [])] }]))
@@ -628,9 +720,17 @@ function mergeLibraries(saved, defaults) {
       continue
     }
     const existing = byId.get(cat.id)
+    existing.description = cat.description
     const pkgs = new Set(existing.items.map((i) => i.pkg))
     for (const item of cat.items) {
-      if (!pkgs.has(item.pkg)) existing.items.push(structuredClone(item))
+      if (!pkgs.has(item.pkg)) {
+        existing.items.push(structuredClone(item))
+        continue
+      }
+      const cur = existing.items.find((i) => i.pkg === item.pkg)
+      if (!cur) continue
+      if (item.for && !cur.for) cur.for = item.for
+      if (item.description) cur.description = item.description
     }
   }
   const ordered = []
@@ -655,8 +755,21 @@ export function read() {
         ...parsed,
         ai: { ...DEFAULTS.ai, ...(parsed.ai || {}) },
         git: { ...DEFAULTS.git, ...(parsed.git || {}) },
-        database: { ...DEFAULTS.database, ...(parsed.database || {}) },
-        libraries: mergeLibraries(parsed.libraries, DEFAULT_LIBRARIES)
+        database: {
+          ...DEFAULTS.database,
+          ...(parsed.database || {}),
+          accounts: Object.fromEntries(
+            Object.keys(DEFAULTS.database.accounts).map((id) => [
+              id,
+              { ...DEFAULTS.database.accounts[id], ...(((parsed.database || {}).accounts || {})[id] || {}) }
+            ])
+          )
+        },
+        onboarding: parsed.onboarding
+          ? { ...DEFAULTS.onboarding, ...parsed.onboarding }
+          : { completed: true, version: 1, skipped: [] },
+        libraries: mergeLibraries(parsed.libraries, DEFAULT_LIBRARIES),
+        frameworks: mergeFrameworks(parsed.frameworks, DEFAULT_FRAMEWORKS)
       }
     } else {
       cache = structuredClone(DEFAULTS)

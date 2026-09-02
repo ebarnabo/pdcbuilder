@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { X, Send, Square, Sparkles, FileDown, PlusCircle, Eraser } from 'lucide-react'
+import { Confirm } from './ui.jsx'
+import { themeLabels } from './themes.jsx'
 import { api } from './bridge.js'
 const uid = () => Math.random().toString(36).slice(2, 10)
 
@@ -25,6 +27,7 @@ export default function Chat({ state, refresh, toast, onClose, project }) {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
+  const [ask, setAsk] = useState(null)
   const chatId = useRef(uid())
   const bodyRef = useRef(null)
 
@@ -68,7 +71,7 @@ export default function Chat({ state, refresh, toast, onClose, project }) {
       `Catégories de librairies : ${state.libraries.map((c) => c.name).join(', ')}`,
       'La documentation officielle des librairies est extraite en local (fichiers .md) et fournie à l’assistant.',
       project
-        ? `Projet actif : ${project.name} (${state.frameworks.find((f) => f.id === project.frameworkId)?.name}) — ${project.path}\nLibrairies : ${project.libs?.join(', ') || 'aucune'}\nBase de données : ${project.databaseId && project.databaseId !== 'none' ? project.databaseId : 'aucune'}`
+        ? `Projet actif : ${project.name} (${state.frameworks.find((f) => f.id === project.frameworkId)?.name}) — ${project.path}\nThèmes : ${themeLabels(project.themes).join(', ') || 'aucun'}\nLibrairies : ${project.libs?.join(', ') || 'aucune'}\nBase de données : ${project.databaseId && project.databaseId !== 'none' ? project.databaseId : 'aucune'}`
         : 'Aucun projet sélectionné.'
     ].join('\n')
 
@@ -78,30 +81,58 @@ export default function Chat({ state, refresh, toast, onClose, project }) {
   const writeFile = async (path, content) => {
     if (!project) return toast('Sélectionne un projet dans la liste d’abord.', true)
     const full = `${project.path}/${path}`.replace(/\\/g, '/')
-    await api.fs.write({ path: full, content })
-    toast(`Écrit : ${path}`)
+    const exists = await api.fs.exists(full)
+    const write = async () => {
+      await api.fs.write({ path: full, content })
+      toast(`Écrit : ${path}`)
+    }
+    if (exists) {
+      setAsk({
+        title: `Écraser ${path} ?`,
+        subtitle: 'Le fichier existe déjà dans le projet. Son contenu actuel sera perdu.',
+        confirm: 'Écraser',
+        run: write
+      })
+      return
+    }
+    await write()
   }
 
   const addToCatalog = async (kind, json) => {
     try {
       const data = JSON.parse(json)
-      if (kind === 'pdc-framework') {
-        const id = data.id || data.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')
-        await api.state.patch({
-          frameworks: [...state.frameworks.filter((f) => f.id !== id), { ...data, id }]
-        })
-        toast(`Framework ${data.name} ajouté`)
-      } else {
-        const catId = (data.category || 'utils').toLowerCase().replace(/[^a-z0-9]+/g, '-')
-        let libs = state.libraries
-        if (!libs.some((c) => c.id === catId)) libs = [...libs, { id: catId, name: data.category, description: '', items: [] }]
-        libs = libs.map((c) => c.id === catId
-          ? { ...c, items: [...c.items.filter((i) => i.pkg !== data.pkg), { id: data.pkg, name: data.name, pkg: data.pkg, description: data.description, dev: !!data.dev, docs: data.docs || '' }] }
-          : c)
-        await api.state.patch({ libraries: libs })
-        toast(`Librairie ${data.name} ajoutée`)
+      const apply = async () => {
+        if (kind === 'pdc-framework') {
+          const id = data.id || data.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+          await api.state.patch({
+            frameworks: [...state.frameworks.filter((f) => f.id !== id), { ...data, id }]
+          })
+          toast(`Framework ${data.name} ajouté`)
+        } else {
+          const catId = (data.category || 'utils').toLowerCase().replace(/[^a-z0-9]+/g, '-')
+          let libs = state.libraries
+          if (!libs.some((c) => c.id === catId)) libs = [...libs, { id: catId, name: data.category, description: '', items: [] }]
+          libs = libs.map((c) => c.id === catId
+            ? { ...c, items: [...c.items.filter((i) => i.pkg !== data.pkg), { id: data.pkg, name: data.name, pkg: data.pkg, description: data.description, dev: !!data.dev, docs: data.docs || '' }] }
+            : c)
+          await api.state.patch({ libraries: libs })
+          toast(`Librairie ${data.name} ajoutée`)
+        }
+        refresh()
       }
-      refresh()
+      const exists = kind === 'pdc-framework'
+        ? state.frameworks.some((f) => f.id === (data.id || data.name?.toLowerCase().replace(/[^a-z0-9]+/g, '-')))
+        : state.libraries.some((c) => c.items.some((i) => i.pkg === data.pkg))
+      if (exists) {
+        setAsk({
+          title: `Remplacer ${data.name || data.pkg} ?`,
+          subtitle: 'Une entrée du même nom existe déjà dans le catalogue.',
+          confirm: 'Remplacer',
+          run: apply
+        })
+        return
+      }
+      await apply()
     } catch (e) {
       toast(`JSON invalide : ${e.message}`, true)
     }
@@ -121,7 +152,15 @@ export default function Chat({ state, refresh, toast, onClose, project }) {
             {state.ai.model} · {state.ai.provider}{project ? ` · ${project.name}` : ''}
           </div>
         </div>
-        <button className="btn icon sm ghost" aria-label="Vider la conversation" onClick={() => setMessages([])}><Eraser size={16} /></button>
+        <button className="btn icon sm ghost" aria-label="Vider la conversation" onClick={() => {
+          if (!messages.length) return
+          setAsk({
+            title: 'Vider la conversation ?',
+            subtitle: 'Les messages de cette session disparaissent. Rien n’est écrit sur le disque.',
+            confirm: 'Vider',
+            run: () => setMessages([])
+          })
+        }}><Eraser size={16} /></button>
         <button className="btn icon sm ghost" aria-label="Fermer" onClick={onClose}><X size={16} /></button>
       </div>
 
@@ -190,6 +229,18 @@ export default function Chat({ state, refresh, toast, onClose, project }) {
           <span className="kbd">↵</span> envoyer · <span className="kbd">⇧↵</span> nouvelle ligne
         </span>
       </div>
+      {ask && (
+        <Confirm
+          title={ask.title}
+          subtitle={ask.subtitle}
+          confirm={ask.confirm}
+          onClose={() => setAsk(null)}
+          onConfirm={async () => {
+            await ask.run()
+            setAsk(null)
+          }}
+        />
+      )}
     </aside>
   )
 }

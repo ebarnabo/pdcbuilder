@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { flushSync } from 'react-dom'
-import { Boxes, Bookmark, Layers, Settings as Cog, Sparkles, Terminal, Trash2, Download } from 'lucide-react'
+import { Boxes, Bookmark, Layers, Settings as Cog, Sparkles, Terminal, Trash2, Download, Minus, Square, X } from 'lucide-react'
 import Projects from './Projects.jsx'
 import Catalog from './Catalog.jsx'
 import Blueprints from './Blueprints.jsx'
 import Settings from './Settings.jsx'
 import Chat from './Chat.jsx'
-import { Chevron } from './ui.jsx'
+import Onboarding from './Onboarding.jsx'
+import { Chevron, Confirm } from './ui.jsx'
 import { api, waitForApi } from './bridge.js'
 
 const VIEWS = {
@@ -19,6 +20,61 @@ const ORDER = Object.keys(VIEWS)
 const NAV_STEP = 46 // hauteur 42 + gap 4
 
 const reduced = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
+const isWin = () => window.pdc?.platform === 'win32'
+
+function RestoreGlyph() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+      <path d="M4 2.5h5.5V8" stroke="currentColor" strokeWidth="1.2" />
+      <rect x="2.5" y="4" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.2" />
+    </svg>
+  )
+}
+
+function BootVeil({ fading }) {
+  return (
+    <div className={`boot-veil${fading ? ' out' : ''}`} aria-busy={!fading} aria-live="polite">
+      <div className="boot-chrome">
+        <div className="spacer" />
+        <WindowControls />
+      </div>
+      <div className="boot-center">
+        <div className="boot-badge">
+          <span className="boot-arc" aria-hidden />
+          <div className="mark">PB</div>
+        </div>
+        <p>Ouverture de l’atelier</p>
+      </div>
+    </div>
+  )
+}
+
+function WindowControls() {
+  const [maxed, setMaxed] = useState(false)
+  useEffect(() => {
+    if (!isWin()) return undefined
+    let off = () => {}
+    waitForApi().then(() => {
+      api.window.isMaximized().then(setMaxed)
+      off = api.on('window:maximized', setMaxed)
+    }).catch(() => {})
+    return () => off()
+  }, [])
+  if (!isWin()) return null
+  return (
+    <div className="win-controls" onDoubleClick={(e) => e.stopPropagation()}>
+      <button type="button" aria-label="Réduire" onClick={() => api.window.minimize()}>
+        <Minus size={14} strokeWidth={1.8} />
+      </button>
+      <button type="button" aria-label={maxed ? 'Restaurer' : 'Agrandir'} onClick={() => api.window.toggleMax()}>
+        {maxed ? <RestoreGlyph /> : <Square size={12} strokeWidth={1.8} />}
+      </button>
+      <button type="button" className="close" aria-label="Fermer" onClick={() => api.window.close()}>
+        <X size={14} strokeWidth={1.8} />
+      </button>
+    </div>
+  )
+}
 
 export default function App() {
   const [state, setState] = useState(null)
@@ -34,6 +90,8 @@ export default function App() {
   const [bootError, setBootError] = useState(null)
   const [update, setUpdate] = useState(null)
   const [docsStatus, setDocsStatus] = useState(null)
+  const [boot, setBoot] = useState('loading')
+  const [clearLogs, setClearLogs] = useState(false)
   const logRef = useRef(null)
   const contentRef = useRef(null)
   const lastH = useRef(300)
@@ -81,6 +139,22 @@ export default function App() {
     }).catch(() => {})
     return () => unsub()
   }, [refresh])
+
+  useEffect(() => {
+    if (!state || boot !== 'loading') return
+    if (reduced()) {
+      setBoot('ready')
+      return
+    }
+    const id = requestAnimationFrame(() => setBoot('reveal'))
+    return () => cancelAnimationFrame(id)
+  }, [state, boot])
+
+  useEffect(() => {
+    if (boot !== 'reveal') return
+    const t = setTimeout(() => setBoot('ready'), 560)
+    return () => clearTimeout(t)
+  }, [boot])
 
   useEffect(() => {
     const behavior = reduced() ? 'auto' : 'smooth'
@@ -146,6 +220,7 @@ export default function App() {
       <div className="shell">
         <nav className="rail"><div className="drag" /></nav>
         <main className="main">
+          <header className="topbar"><div className="spacer" /><WindowControls /></header>
           <div className="content"><div className="content-inner">
             <div className="empty">
               <strong>Impossible de démarrer l’interface</strong>
@@ -159,13 +234,8 @@ export default function App() {
 
   if (!state) {
     return (
-      <div className="shell">
-        <nav className="rail"><div className="drag" /></nav>
-        <main className="main">
-          <div className="content"><div className="content-inner">
-            <div className="grid">{[0, 1, 2].map((i) => <div className="skeleton" key={i} />)}</div>
-          </div></div>
-        </main>
+      <div className="shell boot-loading">
+        <BootVeil fading={false} />
       </div>
     )
   }
@@ -174,9 +244,10 @@ export default function App() {
   const meta = VIEWS[view]
   const open = consoleH > 46
   const panelH = Math.max(consoleH, 46)
+  const showOnboarding = boot === 'ready' && !state.onboarding?.completed
 
   return (
-    <div className="shell">
+    <div className={`shell boot-${boot}${showOnboarding ? ' onboard-behind' : ''}`}>
       <nav className="rail">
         <div className="drag" />
         <div className="brand">
@@ -220,11 +291,15 @@ export default function App() {
       </nav>
 
       <main className="main">
-        <header className={`topbar${stuck ? ' stuck' : ''}`}>
+        <header
+          className={`topbar${stuck ? ' stuck' : ''}`}
+          onDoubleClick={() => { if (isWin()) api.window.toggleMax() }}
+        >
           <h2>{meta.title}</h2>
           <span className="sub">{meta.sub}</span>
           <div className="spacer" />
           {active && <span className="chip accent">Actif · {active.name}</span>}
+          <WindowControls />
         </header>
 
         {update && (update.status === 'ready' || update.status === 'downloading') && (
@@ -274,7 +349,7 @@ export default function App() {
             </span>
             <div className="spacer" />
             {logs.length > 0 && (
-              <button className="btn icon sm ghost" aria-label="Vider la console" onClick={() => setLogs([])}><Trash2 size={14} /></button>
+              <button className="btn icon sm ghost" aria-label="Vider la console" onClick={() => setClearLogs(true)}><Trash2 size={14} /></button>
             )}
             <button className="btn icon sm ghost" aria-label={open ? 'Réduire' : 'Déplier'} onClick={toggleConsole}>
               <Chevron open={!open} size={16} />
@@ -298,6 +373,19 @@ export default function App() {
       </main>
 
       {toast && <div key={toast.key} className={`toast${toast.isError ? ' err' : ''}`}>{toast.message}</div>}
+      {boot !== 'ready' && <BootVeil fading={boot === 'reveal'} />}
+      {clearLogs && (
+        <Confirm
+          title="Vider la console ?"
+          subtitle={`${logs.length} ligne${logs.length > 1 ? 's' : ''} seront effacées. Les fichiers des projets ne bougent pas.`}
+          confirm="Vider"
+          onClose={() => setClearLogs(false)}
+          onConfirm={() => { setLogs([]); setClearLogs(false) }}
+        />
+      )}
+      {showOnboarding && (
+        <Onboarding state={state} onComplete={refresh} />
+      )}
     </div>
   )
 }

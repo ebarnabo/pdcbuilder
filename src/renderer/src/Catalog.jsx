@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Plus, Trash2, Pencil, RotateCcw, Package, Terminal, BookOpen } from 'lucide-react'
-import { Modal, Field, Segmented, Chevron, SearchBox } from './ui.jsx'
+import { Modal, Field, Segmented, Chevron, SearchBox, ScoreStrip, Confirm } from './ui.jsx'
 import { api } from './bridge.js'
 const blankFw = {
   id: '', name: '', tag: '', description: '',
@@ -15,12 +15,13 @@ export default function Catalog({ state, refresh, toast, tab, setTab, docsStatus
   const [docsIndex, setDocsIndex] = useState([])
   const [libQuery, setLibQuery] = useState('')
   const [openCats, setOpenCats] = useState(() => (state.libraries[0] ? [state.libraries[0].id] : []))
+  const [ask, setAsk] = useState(null)
 
   useEffect(() => {
     api.docs.index().then((r) => setDocsIndex(r?.packages || [])).catch(() => {})
   }, [docsStatus?.done, docsStatus?.status, docsStatus?.lastRun])
 
-  const saveFw = async (fw) => {
+  const applyFw = async (fw) => {
     const id = fw.id || fw.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')
     const exists = state.frameworks.some((f) => f.id === id)
     const next = exists
@@ -30,12 +31,26 @@ export default function Catalog({ state, refresh, toast, tab, setTab, docsStatus
     setEditFw(null); refresh(); toast(exists ? 'Framework mis à jour' : 'Framework ajouté')
   }
 
+  const saveFw = async (fw) => {
+    const id = fw.id || fw.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+    if (!fw.id && state.frameworks.some((f) => f.id === id)) {
+      setAsk({
+        title: `Remplacer ${fw.name} ?`,
+        subtitle: 'Un framework avec le même identifiant existe déjà. Tes réglages actuels seront écrasés.',
+        confirm: 'Remplacer',
+        run: () => applyFw(fw)
+      })
+      return
+    }
+    await applyFw(fw)
+  }
+
   const removeFw = async (id) => {
     await api.state.patch({ frameworks: state.frameworks.filter((f) => f.id !== id) })
     refresh(); toast('Framework retiré du catalogue')
   }
 
-  const saveLib = async ({ category, name, pkg, description, dev, docs, newCategory }) => {
+  const applyLib = async ({ category, name, pkg, description, dev, docs, newCategory, for: compat }) => {
     const catId = newCategory ? newCategory.toLowerCase().replace(/[^a-z0-9]+/g, '-') : category
     let libs = state.libraries
     if (!libs.some((c) => c.id === catId)) {
@@ -43,11 +58,24 @@ export default function Catalog({ state, refresh, toast, tab, setTab, docsStatus
     }
     libs = libs.map((c) =>
       c.id === catId
-        ? { ...c, items: [...c.items.filter((i) => i.pkg !== pkg), { id: pkg, name, pkg, description, dev: !!dev, docs: docs || '' }] }
+        ? { ...c, items: [...c.items.filter((i) => i.pkg !== pkg), { id: pkg, name, pkg, description, dev: !!dev, docs: docs || '', for: compat?.length ? compat : ['any'] }] }
         : c
     )
     await api.state.patch({ libraries: libs })
     setEditLib(null); refresh(); toast('Librairie enregistrée')
+  }
+
+  const saveLib = async (payload) => {
+    if (!editLib?.pkg && payload.pkg && state.libraries.some((c) => c.items.some((i) => i.pkg === payload.pkg))) {
+      setAsk({
+        title: `Remplacer ${payload.name || payload.pkg} ?`,
+        subtitle: 'Une librairie avec le même paquet existe déjà dans le catalogue.',
+        confirm: 'Remplacer',
+        run: () => applyLib(payload)
+      })
+      return
+    }
+    await applyLib(payload)
   }
 
   const removeLib = async (catId, pkg) => {
@@ -95,7 +123,12 @@ export default function Catalog({ state, refresh, toast, tab, setTab, docsStatus
         {tab === 'libraries' && (
           <SearchBox value={libQuery} onChange={setLibQuery} placeholder="Filtrer les paquets" />
         )}
-        <button className="btn" onClick={async () => { await api.state.resetCatalog(); refresh(); toast('Catalogue réinitialisé') }}>
+        <button className="btn" onClick={() => setAsk({
+          title: 'Réinitialiser le catalogue ?',
+          subtitle: 'Frameworks et librairies reviennent aux valeurs d’origine. Tes ajouts et modifications du catalogue sont perdus.',
+          confirm: 'Réinitialiser',
+          run: async () => { await api.state.resetCatalog(); refresh(); toast('Catalogue réinitialisé') }
+        })}>
           <RotateCcw size={15} /> Réinitialiser
         </button>
         <button className="btn primary" onClick={() => (tab === 'frameworks' ? setEditFw(blankFw) : setEditLib({ category: state.libraries[0]?.id }))}>
@@ -114,6 +147,7 @@ export default function Catalog({ state, refresh, toast, tab, setTab, docsStatus
                 </div>
               </div>
               <p className="card-desc">{f.description}</p>
+              <ScoreStrip scores={f.scores} />
               <div className="card-path"><Terminal size={11} style={{ verticalAlign: -1 }} /> {f.create}</div>
               <div className="chip-row">
                 <span className="chip">dev · {f.dev}</span>
@@ -122,7 +156,12 @@ export default function Catalog({ state, refresh, toast, tab, setTab, docsStatus
               </div>
               <div className="card-actions">
                 <button className="btn sm ghost" onClick={() => setEditFw(f)}><Pencil size={14} /> Modifier</button>
-                <button className="btn sm danger" onClick={() => removeFw(f.id)}><Trash2 size={14} /> Retirer</button>
+                <button className="btn sm danger" onClick={() => setAsk({
+                  title: `Retirer ${f.name} ?`,
+                  subtitle: 'Il quitte le catalogue. Les projets déjà créés avec ce framework restent en place.',
+                  confirm: 'Retirer',
+                  run: () => removeFw(f.id)
+                })}><Trash2 size={14} /> Retirer</button>
               </div>
             </article>
           ))}
@@ -176,7 +215,12 @@ export default function Catalog({ state, refresh, toast, tab, setTab, docsStatus
                         <BookOpen size={14} />
                       </button>
                     )}
-                    <button className="btn icon sm ghost" aria-label="Retirer" onClick={() => removeLib(c.id, i.pkg)}><Trash2 size={14} /></button>
+                    <button className="btn icon sm ghost" aria-label="Retirer" onClick={() => setAsk({
+                      title: `Retirer ${i.name} ?`,
+                      subtitle: `${i.pkg} quitte le catalogue. Les projets qui l’ont déjà installé ne sont pas désinstallés.`,
+                      confirm: 'Retirer',
+                      run: () => removeLib(c.id, i.pkg)
+                    })}><Trash2 size={14} /></button>
                   </div>
                   )
                 })}
@@ -191,6 +235,18 @@ export default function Catalog({ state, refresh, toast, tab, setTab, docsStatus
 
       {editFw && <FrameworkForm value={editFw} onClose={() => setEditFw(null)} onSave={saveFw} />}
       {editLib && <LibraryForm value={editLib} categories={state.libraries} onClose={() => setEditLib(null)} onSave={saveLib} />}
+      {ask && (
+        <Confirm
+          title={ask.title}
+          subtitle={ask.subtitle}
+          confirm={ask.confirm}
+          onClose={() => setAsk(null)}
+          onConfirm={async () => {
+            await ask.run()
+            setAsk(null)
+          }}
+        />
+      )}
     </>
   )
 }
@@ -212,8 +268,18 @@ function FrameworkForm({ value, onClose, onSave }) {
     >
       <div className="row">
         <Field label="Nom"><input className="input" value={f.name} onChange={set('name')} placeholder="Remix" /></Field>
-        <Field label="Famille"><input className="input" value={f.tag} onChange={set('tag')} placeholder="React" /></Field>
+        <Field label="Étiquette"><input className="input" value={f.tag} onChange={set('tag')} placeholder="React" /></Field>
       </div>
+      <Field label="Écosystème" hint="Sert à filtrer les librairies compatibles à la création d’un projet.">
+        <select className="select" value={f.family || ''} onChange={set('family')}>
+          <option value="">Déduire depuis l’étiquette</option>
+          <option value="react">React</option>
+          <option value="vue">Vue</option>
+          <option value="svelte">Svelte</option>
+          <option value="vanilla">Vanilla</option>
+          <option value="astro">Astro</option>
+        </select>
+      </Field>
       <Field label="Description" hint="Affichée au moment de choisir le framework.">
         <textarea className="textarea" value={f.description} onChange={set('description')} />
       </Field>
@@ -233,9 +299,30 @@ function FrameworkForm({ value, onClose, onSave }) {
   )
 }
 
+const COMPAT = [
+  { id: 'any', label: 'Tous' },
+  { id: 'react', label: 'React' },
+  { id: 'vue', label: 'Vue' },
+  { id: 'svelte', label: 'Svelte' },
+  { id: 'next', label: 'Next.js' },
+  { id: 'nuxt', label: 'Nuxt' },
+  { id: 'vanilla', label: 'Vanilla' },
+  { id: 'astro', label: 'Astro' }
+]
+
 function LibraryForm({ value, categories, onClose, onSave }) {
-  const [l, setL] = useState({ name: '', pkg: '', description: '', dev: false, docs: '', newCategory: '', ...value })
+  const [l, setL] = useState({ name: '', pkg: '', description: '', dev: false, docs: '', newCategory: '', for: ['any'], ...value })
   const set = (k) => (e) => setL({ ...l, [k]: e.target.value })
+  const tags = l.for?.length ? l.for : ['any']
+  const toggleFor = (id) => {
+    if (id === 'any') {
+      setL({ ...l, for: ['any'] })
+      return
+    }
+    const cur = tags.filter((t) => t !== 'any')
+    const next = cur.includes(id) ? cur.filter((t) => t !== id) : [...cur, id]
+    setL({ ...l, for: next.length ? next : ['any'] })
+  }
   return (
     <Modal
       title="Ajouter une librairie"
@@ -261,6 +348,21 @@ function LibraryForm({ value, categories, onClose, onSave }) {
         <Field label="Paquet npm"><input className="input mono" value={l.pkg} onChange={set('pkg')} placeholder="tone" /></Field>
       </div>
       <Field label="Description"><textarea className="textarea" value={l.description} onChange={set('description')} /></Field>
+      <Field label="Compatible avec" hint="« Tous » reste visible pour n’importe quel framework. React / Vue / Next… ne s’affichent que là où ça s’installe.">
+        <div className="chip-row">
+          {COMPAT.map((o) => (
+            <button
+              key={o.id}
+              type="button"
+              className={`chip link${tags.includes(o.id) ? ' accent' : ''}`}
+              onClick={() => toggleFor(o.id)}
+              aria-pressed={tags.includes(o.id)}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+      </Field>
       <Field label="Documentation (facultatif)" hint="Sinon l’app récupère homepage et README depuis npm, en silence au démarrage.">
         <input className="input mono" value={l.docs || ''} onChange={set('docs')} placeholder="https://…" />
       </Field>

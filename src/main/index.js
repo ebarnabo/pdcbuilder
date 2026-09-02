@@ -10,6 +10,7 @@ import * as git from './git.js'
 import * as updater from './updater.js'
 import * as docs from './docs.js'
 import * as database from './database.js'
+import * as dbcloud from './dbcloud.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const isMac = platform() === 'darwin'
@@ -38,11 +39,11 @@ function createWindow() {
     minWidth: 1000,
     minHeight: 680,
     show: false,
-    backgroundColor: '#141110',
+    backgroundColor: '#16130f',
     autoHideMenuBar: true,
     titleBarStyle: isMac ? 'hiddenInset' : 'hidden',
-    trafficLightPosition: { x: 20, y: 22 },
-    titleBarOverlay: isMac ? false : { color: '#141110', symbolColor: '#F3EDE6', height: 56 },
+    trafficLightPosition: { x: 16, y: 16 },
+    titleBarOverlay: false,
     vibrancy: isMac ? 'under-window' : undefined,
     webPreferences: {
       preload,
@@ -77,6 +78,12 @@ function createWindow() {
     return { action: 'deny' }
   })
 
+  const sendMax = () => {
+    if (win && !win.isDestroyed()) win.webContents.send('window:maximized', win.isMaximized())
+  }
+  win.on('maximize', sendMax)
+  win.on('unmaximize', sendMax)
+
   if (isDev) {
     win.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {
@@ -86,6 +93,16 @@ function createWindow() {
 }
 
 nativeTheme.themeSource = 'dark'
+
+ipcMain.handle('window:minimize', () => { win?.minimize(); return { ok: true } })
+ipcMain.handle('window:toggle-max', () => {
+  if (!win || win.isDestroyed()) return { ok: false }
+  if (win.isMaximized()) win.unmaximize()
+  else win.maximize()
+  return { ok: true, maximized: win.isMaximized() }
+})
+ipcMain.handle('window:close', () => { win?.close(); return { ok: true } })
+ipcMain.handle('window:is-maximized', () => Boolean(win && !win.isDestroyed() && win.isMaximized()))
 
 app.whenReady().then(() => {
   if (!isMac) app.setAppUserModelId('com.pdcdesign.builder')
@@ -182,7 +199,7 @@ function installLibs(projectId, path, libs) {
   )
 }
 
-async function applyDatabase(projectId, path, frameworkId, databaseId) {
+async function applyDatabase(projectId, path, frameworkId, databaseId, { provision = false, name } = {}) {
   const db = database.byId(databaseId)
   if (!db || db.id === 'none') return { ok: true, databaseId: 'none' }
   const written = database.writeFiles(path, db.id, frameworkId)
@@ -195,6 +212,18 @@ async function applyDatabase(projectId, path, frameworkId, databaseId) {
   }
   if (res.ok && written.extraDev.length) {
     res = await runner.exec(win, projectId, `npm install -D ${written.extraDev.join(' ')}`, path, 'base de données (dev)')
+  }
+  if (res.ok && provision) {
+    runner.log(win, projectId, `provision ${db.name}…`, 'info')
+    const cloud = await dbcloud.provision({ path, frameworkId, databaseId: db.id, name: name || db.name, createRemote: true })
+    if (!cloud.ok) {
+      runner.log(win, projectId, `provision : ${cloud.error}`, 'err')
+      return { ok: false, databaseId: db.id, error: cloud.error }
+    }
+    for (const f of cloud.files || []) {
+      runner.log(win, projectId, `env : ${f.slice(path.length).replace(/^[\\/]/, '')}`, 'ok')
+    }
+    if (cloud.created) runner.log(win, projectId, `base distante créée (${db.name})`, 'ok')
   }
   return { ok: res.ok, databaseId: db.id, error: res.error }
 }
@@ -212,6 +241,7 @@ ipcMain.handle('project:create', async (_e, payload) => {
   if (existsSync(path)) return { ok: false, error: `Le dossier ${dirName} existe déjà.` }
   mkdirSync(workspace, { recursive: true })
 
+  const bp = s.blueprints.find((b) => b.id === payload.blueprintId)
   const project = {
     id,
     name: payload.name,
@@ -220,6 +250,7 @@ ipcMain.handle('project:create', async (_e, payload) => {
     libs: payload.libs || [],
     blueprintId: payload.blueprintId || null,
     databaseId: payload.databaseId || s.database?.defaultId || 'none',
+    themes: Array.isArray(payload.themes) ? payload.themes : (bp?.themes || []),
     notes: payload.notes || '',
     createdAt: Date.now(),
     status: 'scaffolding',
@@ -234,12 +265,12 @@ ipcMain.handle('project:create', async (_e, payload) => {
   if (res.ok && project.libs.length) res = await installLibs(id, path, project.libs)
 
   if (res.ok && project.databaseId && project.databaseId !== 'none') {
-    const dbRes = await applyDatabase(id, path, fw.id, project.databaseId)
+    const wantCloud = payload.provision != null ? Boolean(payload.provision) : s.database?.autoCreate !== false
+    const dbRes = await applyDatabase(id, path, fw.id, project.databaseId, { provision: wantCloud, name: dirName })
     if (!dbRes.ok) res = dbRes
   }
 
   // fichiers issus d'un blueprint
-  const bp = s.blueprints.find((b) => b.id === payload.blueprintId)
   if (res.ok && bp?.files?.length) {
     for (const f of bp.files) {
       const target = join(path, f.path)
@@ -276,7 +307,7 @@ ipcMain.handle('project:create', async (_e, payload) => {
   return { ok: res.ok, id, path, repo, gitError }
 })
 
-ipcMain.handle('project:import', async (_e, { path, frameworkId, name }) => {
+ipcMain.handle('project:import', async (_e, { path, frameworkId, name, themes }) => {
   const s = store.read()
   if (!existsSync(path)) return { ok: false, error: 'Dossier introuvable.' }
   const project = {
@@ -285,6 +316,7 @@ ipcMain.handle('project:import', async (_e, { path, frameworkId, name }) => {
     path,
     frameworkId: frameworkId || s.frameworks[0].id,
     libs: [],
+    themes: Array.isArray(themes) ? themes : [],
     createdAt: Date.now(),
     status: 'ready'
   }
@@ -454,6 +486,7 @@ ipcMain.handle('blueprint:from-project', (_e, { id, name }) => {
     frameworkId: p.frameworkId,
     libs: p.libs,
     databaseId: p.databaseId || 'none',
+    themes: p.themes || [],
     files: [],
     commands: [],
     createdAt: Date.now()
@@ -527,6 +560,7 @@ ipcMain.handle('git:clone', async (_e, payload) => {
     path: dest,
     frameworkId: s.frameworks[0]?.id,
     libs: [],
+    themes: Array.isArray(payload.themes) ? payload.themes : [],
     createdAt: Date.now(),
     status: 'cloning'
   }
@@ -604,20 +638,29 @@ ipcMain.handle('ai:chat', async (_e, { chatId, messages, context, libs }) => {
 
 ipcMain.handle('database:list', () => ({
   providers: database.list(),
-  guide: database.GUIDE
+  guide: database.GUIDE,
+  cloud: dbcloud.catalog()
 }))
-ipcMain.handle('database:apply', async (_e, { id, databaseId }) => {
+ipcMain.handle('database:apply', async (_e, { id, databaseId, provision }) => {
   const p = projectById(id)
   if (!p) return { ok: false, error: 'Projet introuvable.' }
   if (!existsSync(p.path)) return { ok: false, error: 'Dossier introuvable.' }
   const fw = store.read().frameworks.find((f) => f.id === p.frameworkId)
-  const res = await applyDatabase(id, p.path, fw?.id || p.frameworkId, databaseId)
+  const res = await applyDatabase(id, p.path, fw?.id || p.frameworkId, databaseId, {
+    provision: Boolean(provision),
+    name: p.name
+  })
   if (res.ok) {
     patchProject(id, { databaseId: res.databaseId })
     win.webContents.send('project:changed')
   }
   return res
 })
+ipcMain.handle('database:cloud-status', () => dbcloud.status())
+ipcMain.handle('database:cloud-test', (_e, id) => dbcloud.test(id))
+ipcMain.handle('database:cloud-list', (_e, id) => dbcloud.list(id))
+ipcMain.handle('database:cloud-create', (_e, payload) => dbcloud.create(payload?.id, { name: payload?.name }))
+ipcMain.handle('database:cloud-mcp', (_e, id) => dbcloud.mcpSnippet(id))
 ipcMain.handle('app:update-status', () => updater.getSnapshot())
 ipcMain.handle('app:update-check', () => updater.check())
 ipcMain.handle('app:update-install', () => updater.install())
