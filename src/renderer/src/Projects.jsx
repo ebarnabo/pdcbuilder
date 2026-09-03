@@ -8,7 +8,7 @@ import { Modal, Menu, Field, SearchBox, LibraryPicker, Empty, bytes, ago, shortP
 import { GitFields, RepoChip, CloneModal } from './GitFields.jsx'
 import { DatabasePicker } from './DatabaseFields.jsx'
 import { ProvisionToggle } from './DatabaseCloud.jsx'
-import { librariesFor, keepCompatible, filterLibraryItems } from './compat.js'
+import { librariesFor, keepCompatible, filterLibraryItems, countCatalogLibraries } from './compat.js'
 import { THEMES, ThemePicker, themeLabel, toggleTheme } from './themes.jsx'
 import { api } from './bridge.js'
 
@@ -417,6 +417,11 @@ function NewProject({ state, onClose, onDone }) {
   const fw = state.frameworks.find((f) => f.id === frameworkId)
   const compatible = useMemo(() => librariesFor(state.libraries, fw), [state.libraries, fw])
   const visibleLibs = useMemo(() => filterLibraryItems(compatible, libQuery), [compatible, libQuery])
+  const catalogCount = useMemo(() => countCatalogLibraries(state.libraries), [state.libraries])
+  const compatibleCount = useMemo(
+    () => visibleLibs.reduce((n, c) => n + c.items.length, 0),
+    [visibleLibs]
+  )
   const slug = name.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 
   useEffect(() => {
@@ -510,7 +515,11 @@ function NewProject({ state, onClose, onDone }) {
         <div className="form-section-top">
           <div>
             <h4>Librairies</h4>
-            <p className="form-section-lead">Optionnel — ajoute des paquets dès la création. Clique pour sélectionner.</p>
+            <p className="form-section-lead">
+              {fw
+                ? `${compatibleCount} compatible${compatibleCount > 1 ? 's' : ''} sur ${catalogCount} pour ${fw.name}.`
+                : 'Choisis d’abord un framework.'}
+            </p>
           </div>
           {libs.length > 0 && (
             <span className="chip accent"><Package size={11} /> {libs.length} sélectionnée{libs.length > 1 ? 's' : ''}</span>
@@ -523,8 +532,10 @@ function NewProject({ state, onClose, onDone }) {
           query={libQuery}
           onQueryChange={setLibQuery}
           showScores
+          framework={fw}
+          catalogCount={catalogCount}
           onToggle={(pkg) => setLibs((l) => (l.includes(pkg) ? l.filter((x) => x !== pkg) : [...l, pkg]))}
-          empty={<p className="card-desc" style={{ margin: 0 }}>Aucun paquet ne correspond à ta recherche.</p>}
+          empty={<p className="card-desc" style={{ margin: 0 }}>Aucun paquet compatible ne correspond à ta recherche.</p>}
         />
       </section>
 
@@ -594,6 +605,8 @@ function AddLibs({ project, state, onClose, onDone }) {
         query={libQuery}
         onQueryChange={setLibQuery}
         showScores
+        framework={fw}
+        catalogCount={countCatalogLibraries(state.libraries)}
         onToggle={(pkg) => setLibs((l) => (l.includes(pkg) ? l.filter((x) => x !== pkg) : [...l, pkg]))}
       />
     </Modal>

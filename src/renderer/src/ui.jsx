@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useLayoutEffect, useId } from 'react'
 import { createPortal } from 'react-dom'
 import { X, Check, Search, ChevronsDownUp, ChevronsUpDown } from 'lucide-react'
 import { libScores } from './libScores.js'
+import { compatibilityBadge } from './compat.js'
 
 /* ── modale : portail body, Échap, voile, focus piégé, un seul scroll ── */
 export function Modal({ title, subtitle, onClose, children, footer, width }) {
@@ -233,13 +234,20 @@ export function LibraryPicker({
   onQueryChange,
   showScores = false,
   empty,
-  layout = 'accordion'
+  layout = 'accordion',
+  framework = null,
+  catalogCount = null
 }) {
   const [activeCat, setActiveCat] = useState(null)
+  const catKey = categories.map((c) => c.id).join(',')
+
+  useEffect(() => { setActiveCat(null) }, [catKey])
 
   if (!categories?.length) {
     return empty || (
-      <p className="card-desc" style={{ margin: 0 }}>Aucune librairie compatible.</p>
+      <p className="card-desc" style={{ margin: 0 }}>
+        {framework ? `Aucune librairie compatible avec ${framework.name}.` : 'Aucune librairie compatible.'}
+      </p>
     )
   }
 
@@ -251,6 +259,7 @@ export function LibraryPicker({
   const renderItem = (item) => {
     const on = selected.includes(item.pkg)
     const scores = showScores ? libScores(item) : null
+    const compat = framework ? compatibilityBadge(item, framework) : null
     return (
       <button
         key={item.pkg}
@@ -261,10 +270,13 @@ export function LibraryPicker({
       >
         <span className="tick">{on && <Check size={12} strokeWidth={3.2} />}</span>
         <span className="lib-main">
-          <strong>
-            {item.name}
-            {item.dev && <span className="chip" style={{ marginLeft: 6, height: 17, fontSize: 10 }}>dev</span>}
-          </strong>
+          <span className="lib-title-row">
+            <strong>
+              {item.name}
+              {item.dev && <span className="chip" style={{ marginLeft: 6, height: 17, fontSize: 10 }}>dev</span>}
+            </strong>
+            {compat && <span className={`lib-compat ${compat.tone}`}>{compat.text}</span>}
+          </span>
           <small className="mono">{item.pkg}</small>
           <small>{item.description}</small>
           {scores && <ScoreStrip scores={scores} />}
@@ -283,7 +295,10 @@ export function LibraryPicker({
           {onQueryChange && (
             <SearchBox value={query} onChange={onQueryChange} placeholder="Chercher un paquet, une catégorie…" />
           )}
-          <span className="chip">{total} paquet{total > 1 ? 's' : ''}</span>
+          <span className="chip accent">{total} compatible{total > 1 ? 's' : ''}</span>
+          {catalogCount != null && catalogCount > total && (
+            <span className="chip">sur {catalogCount} au catalogue</span>
+          )}
         </div>
 
         {selected.length > 0 && (
@@ -377,7 +392,10 @@ export function LibraryPicker({
                 <ChevronsDownUp size={13} /> Tout fermer
               </button>
             )}
-            <span className="chip">{total} paquet{total > 1 ? 's' : ''}</span>
+            <span className="chip accent">{total} compatible{total > 1 ? 's' : ''}</span>
+          {catalogCount != null && catalogCount > total && (
+            <span className="chip">sur {catalogCount} au catalogue</span>
+          )}
           </div>
         </div>
       )}

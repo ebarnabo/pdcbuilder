@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { Plus, Trash2, Pencil, Bookmark, FileCode2, Database } from 'lucide-react'
 import { Modal, Field, Empty, LibraryPicker, ScoreNotes, Confirm } from './ui.jsx'
 import { DatabasePicker } from './DatabaseFields.jsx'
-import { librariesFor, keepCompatible, filterLibraryItems } from './compat.js'
+import { librariesFor, keepCompatible, filterLibraryItems, countCatalogLibraries } from './compat.js'
 import { ThemePicker, themeLabel } from './themes.jsx'
 import { api } from './bridge.js'
 
@@ -98,13 +98,10 @@ function BlueprintForm({ value, state, onClose, onSave }) {
   const fw = state.frameworks.find((f) => f.id === b.frameworkId)
   const compatible = useMemo(() => librariesFor(state.libraries, fw), [state.libraries, fw])
   const visibleLibs = useMemo(() => filterLibraryItems(compatible, libQuery), [compatible, libQuery])
-  const [open, setOpen] = useState([compatible[0]?.id].filter(Boolean))
 
   const setFramework = (id) => {
     const nextFw = state.frameworks.find((f) => f.id === id)
-    const nextCats = librariesFor(state.libraries, nextFw)
     setB({ ...b, frameworkId: id, libs: keepCompatible(b.libs, state.libraries, nextFw) })
-    setOpen([nextCats[0]?.id].filter(Boolean))
   }
 
   return (
@@ -172,15 +169,14 @@ function BlueprintForm({ value, state, onClose, onSave }) {
         hint={fw ? `Uniquement celles compatibles avec ${fw.name}.` : undefined}
       >
         <LibraryPicker
+          layout="explore"
           categories={visibleLibs}
           selected={b.libs}
-          openIds={open}
           query={libQuery}
           onQueryChange={setLibQuery}
-          onOpenAll={() => setOpen(visibleLibs.map((c) => c.id))}
-          onCloseAll={() => setOpen([])}
           showScores
-          onToggleGroup={(id) => setOpen((o) => (o.includes(id) ? o.filter((x) => x !== id) : [...o, id]))}
+          framework={fw}
+          catalogCount={countCatalogLibraries(state.libraries)}
           onToggle={(pkg) => setB({ ...b, libs: b.libs.includes(pkg) ? b.libs.filter((x) => x !== pkg) : [...b.libs, pkg] })}
         />
       </Field>

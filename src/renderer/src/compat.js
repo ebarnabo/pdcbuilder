@@ -60,10 +60,84 @@ function isUniversalPkg(pkg) {
     || /^@tanstack\/(query|virtual|form)$/.test(p)
 }
 
+/** Catégories réservées à une famille de frameworks. */
+const CAT_SCOPE = {
+  react: new Set(['react', 'next', 'electron-react']),
+  vue: new Set(['vue', 'nuxt']),
+  svelte: new Set(['svelte', 'sveltekit'])
+}
+
+const COMPAT_LABELS = {
+  any: 'Universel',
+  react: 'React',
+  vue: 'Vue',
+  svelte: 'Svelte',
+  next: 'Next.js',
+  nuxt: 'Nuxt',
+  vanilla: 'Vanilla',
+  astro: 'Astro'
+}
+
+function categoryVisible(catId, fw) {
+  if (!CAT_SCOPE[catId]) return true
+  if (!fw) return false
+  const family = familyOf(fw)
+  if (CAT_SCOPE[catId].has(fw.id)) return true
+  if (catId === 'react' && family === 'react') return true
+  if (catId === 'vue' && family === 'vue') return true
+  if (catId === 'svelte' && family === 'svelte') return true
+  return false
+}
+
+export function compatibilityTags(item) {
+  return item.for?.length ? item.for : inferFor(item.pkg, item.categoryId)
+}
+
+export function compatibilityBadge(item, fw) {
+  const tags = compatibilityTags(item)
+  const family = familyOf(fw)
+  if (tags.includes('any') || tags.includes('*')) {
+    return { text: COMPAT_LABELS.any, tone: 'universal' }
+  }
+  if (fw?.id === 'next' && tags.includes('next')) {
+    return { text: COMPAT_LABELS.next, tone: 'match' }
+  }
+  if (fw?.id === 'nuxt' && tags.includes('nuxt')) {
+    return { text: COMPAT_LABELS.nuxt, tone: 'match' }
+  }
+  if (family && tags.includes(family)) {
+    return { text: COMPAT_LABELS[family] || family, tone: 'match' }
+  }
+  const label = tags.map((t) => COMPAT_LABELS[t] || t).join(' · ')
+  return { text: label, tone: 'other' }
+}
+
+export function countCatalogLibraries(libraries) {
+  const seen = new Set()
+  let n = 0
+  for (const cat of libraries || []) {
+    for (const item of cat.items || []) {
+      if (seen.has(item.pkg)) continue
+      seen.add(item.pkg)
+      n += 1
+    }
+  }
+  return n
+}
+
 export function inferFor(pkg, categoryId) {
   const p = String(pkg || '').toLowerCase()
   if (categoryId === 'react') return ['react']
   if (categoryId === 'vue') return ['vue']
+  if (categoryId === 'svelte') return ['svelte']
+  if (categoryId === 'ui') {
+    if (isVuePkg(p)) return ['vue']
+    if (isReactPkg(p) || /class-variance|cva|cmdk|vaul|sonner|embla-carousel|floating-ui\/react|input-otp|next-themes|react-day-picker|react-error-boundary|react-resizable|@dnd-kit|shadcn/.test(p)) {
+      return ['react']
+    }
+    if (isUniversalPkg(p)) return ['any']
+    return ['react']
+  }
   if (isUniversalPkg(p)) return ['any']
   if (isNuxtOnly(p)) return ['nuxt']
   if (isNextOnly(p)) return ['next']
@@ -75,8 +149,8 @@ export function inferFor(pkg, categoryId) {
 }
 
 export function libFits(item, fw) {
-  if (!fw) return true
-  const tags = item.for?.length ? item.for : inferFor(item.pkg, item.categoryId)
+  if (!fw) return false
+  const tags = compatibilityTags(item)
   if (tags.includes('any') || tags.includes('*')) return true
   if (tags.includes(fw.id)) return true
   const family = familyOf(fw)
@@ -99,11 +173,17 @@ function dedupeCategories(categories) {
 }
 
 export function librariesFor(libraries, fw) {
+  if (!fw) return []
   const cats = (libraries || [])
+    .filter((cat) => categoryVisible(cat.id, fw))
     .map((cat) => ({
       ...cat,
       items: (cat.items || [])
-        .map((item) => ({ ...item, categoryId: cat.id, for: item.for || inferFor(item.pkg, cat.id) }))
+        .map((item) => ({
+          ...item,
+          categoryId: cat.id,
+          for: item.for?.length ? item.for : inferFor(item.pkg, cat.id)
+        }))
         .filter((item) => libFits(item, fw))
         .sort((a, b) => a.name.localeCompare(b.name, 'fr'))
     }))
