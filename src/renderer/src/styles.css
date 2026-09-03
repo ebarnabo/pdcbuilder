@@ -768,6 +768,14 @@ html.lock-scroll .content { overflow: hidden; }
 }
 .line.err span:last-child { color: var(--err); }
 .line.ok span:last-child { color: var(--ok); }
+.line.url span:last-child { color: var(--accent); font-weight: 600; }
+.console-open-url {
+  margin-left: 4px;
+  max-width: min(340px, 42vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .line.cmd span:last-child { color: var(--accent); font-weight: 500; }
 .line.meta span:last-child { color: var(--info); }
 .line.out span:last-child { color: var(--text-2); }

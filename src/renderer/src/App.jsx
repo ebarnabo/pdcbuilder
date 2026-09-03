@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { flushSync } from 'react-dom'
-import { Boxes, Bookmark, Layers, Settings as Cog, Sparkles, Terminal, Trash2, Download, Minus, Square, X } from 'lucide-react'
+import { Boxes, Bookmark, Layers, Settings as Cog, Sparkles, Terminal, Trash2, Download, Minus, Square, X, Globe, ExternalLink } from 'lucide-react'
 import Projects from './Projects.jsx'
 import Catalog from './Catalog.jsx'
 import Blueprints from './Blueprints.jsx'
@@ -241,6 +241,8 @@ export default function App() {
   }
 
   const active = state.projects.find((p) => p.id === activeId)
+  const running = state.projects.find((p) => p.status === 'running' && p.url)
+  const devUrl = active?.url || running?.url
   const meta = VIEWS[view]
   const open = consoleH > 46
   const panelH = Math.max(consoleH, 46)
@@ -347,6 +349,18 @@ export default function App() {
             <span style={{ color: 'var(--text-3)', fontSize: 12 }}>
               {logs.length ? `${logs.length} lignes` : 'aucune activité'}
             </span>
+            {devUrl && (
+              <button
+                type="button"
+                className="btn sm primary console-open-url"
+                onClick={() => api.fs.openUrl(devUrl)}
+                title={devUrl}
+              >
+                <Globe size={13} />
+                Ouvrir {devUrl.replace(/^https?:\/\//, '')}
+                <ExternalLink size={11} aria-hidden />
+              </button>
+            )}
             <div className="spacer" />
             {logs.length > 0 && (
               <button className="btn icon sm ghost" aria-label="Vider la console" onClick={() => setClearLogs(true)}><Trash2 size={14} /></button>
