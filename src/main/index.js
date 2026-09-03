@@ -43,6 +43,45 @@ function patchProject(id, fields) {
   store.patch({ projects: s.projects.map((p) => (p.id === id ? { ...p, ...fields } : p)) })
 }
 
+let syncingRepos = false
+
+async function syncAllRepos({ notify = true, onlyMissing = false } = {}) {
+  if (syncingRepos) return
+  syncingRepos = true
+  try {
+    const s = store.read()
+    let changed = false
+    const projects = []
+    for (const p of s.projects) {
+      if (!p?.path || !existsSync(p.path)) {
+        projects.push(p)
+        continue
+      }
+      if (onlyMissing && p.repo?.remote) {
+        projects.push(p)
+        continue
+      }
+      const detected = await git.detectRepo(p.path)
+      if (!detected) {
+        projects.push(p)
+        continue
+      }
+      if (p.repo && git.sameRepo(p.repo, detected)) {
+        projects.push(p)
+        continue
+      }
+      changed = true
+      projects.push({ ...p, repo: detected })
+    }
+    if (changed) {
+      store.patch({ projects })
+      if (notify && win && !win.isDestroyed()) win.webContents.send('project:changed')
+    }
+  } finally {
+    syncingRepos = false
+  }
+}
+
 async function installProjectDeps(projectId, root, pmId, label = 'dépendances') {
   const cmd = pm.installForPath(root, pmId)
   return runner.exec(win, projectId, cmd, root, label)
@@ -161,6 +200,7 @@ app.whenReady().then(() => {
     }
   })
   try { preferences.sync(store.read()) } catch { /* ignore */ }
+  syncAllRepos({ notify: false, onlyMissing: false }).catch(() => {})
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
 })
 app.on('window-all-closed', () => { runner.stopAll(); if (!isMac) app.quit() })
@@ -170,6 +210,7 @@ app.on('before-quit', () => runner.stopAll())
 
 ipcMain.handle('state:get', () => {
   const s = store.read()
+  syncAllRepos({ notify: true, onlyMissing: true }).catch(() => {})
   return {
     ...s,
     projects: s.projects.map((p) => ({ ...p, exists: existsSync(p.path), ...runner.devState(p.id) }))
@@ -372,6 +413,7 @@ ipcMain.handle('project:create', async (_e, payload) => {
     repo = published.repo || null
     if (!published.ok && !published.skipped) gitError = published.error
   }
+  if (res.ok && !repo) repo = await git.detectRepo(path)
 
   const s2 = store.read()
   store.patch({
@@ -435,6 +477,7 @@ ipcMain.handle('project:repair', async (_e, id) => {
 ipcMain.handle('project:import', async (_e, { path, frameworkId, name, themes }) => {
   const s = store.read()
   if (!existsSync(path)) return { ok: false, error: 'Dossier introuvable.' }
+  const repo = await git.detectRepo(path)
   const project = {
     id: uid(),
     name: name || basename(path),
@@ -443,10 +486,11 @@ ipcMain.handle('project:import', async (_e, { path, frameworkId, name, themes })
     libs: [],
     themes: Array.isArray(themes) ? themes : [],
     createdAt: Date.now(),
-    status: 'ready'
+    status: 'ready',
+    repo
   }
   store.patch({ projects: [project, ...s.projects] })
-  return { ok: true, id: project.id }
+  return { ok: true, id: project.id, repo }
 })
 
 ipcMain.handle('project:duplicate', async (_e, { id, name }) => {
@@ -642,6 +686,15 @@ function projectById(id) {
 }
 
 ipcMain.handle('git:status', () => git.status())
+ipcMain.handle('git:detect', async (_e, id) => {
+  const p = projectById(id)
+  if (!p) return { ok: false, error: 'Projet introuvable.' }
+  const repo = await git.detectRepo(p.path)
+  if (!repo) return { ok: false, error: 'Aucun dépôt Git avec remote origin dans ce dossier.' }
+  patchProject(id, { repo })
+  win.webContents.send('project:changed')
+  return { ok: true, repo }
+})
 ipcMain.handle('git:publish', async (_e, { id, options }) => {
   const p = projectById(id)
   if (!p) return { ok: false, error: 'Projet introuvable.' }

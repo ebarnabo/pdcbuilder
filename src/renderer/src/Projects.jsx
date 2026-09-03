@@ -68,7 +68,12 @@ export default function Projects({ state, refresh, toast, focusProject }) {
         </button>
         <button className="btn" onClick={async () => {
           const path = await api.fs.pickDir()
-          if (path) await act(() => api.project.import({ path }), 'Projet ajouté')
+          if (path) {
+            const r = await api.project.import({ path })
+            if (r?.error) toast(r.error, true)
+            else toast(r?.repo?.url ? 'Projet ajouté · dépôt détecté' : 'Projet ajouté')
+            refresh()
+          }
         }}>
           <FolderInput size={15} /> Importer
         </button>
@@ -597,8 +602,9 @@ function AddLibs({ project, state, onClose, onDone }) {
 
 function RepoModal({ project, state, onClose, act }) {
   const saved = state.git || {}
-  const [mode, setMode] = useState('create')
-  const [url, setUrl] = useState('')
+  const [mode, setMode] = useState(project.repo?.remote ? 'link' : 'create')
+  const [url, setUrl] = useState(project.repo?.remote || '')
+  const [detecting, setDetecting] = useState(false)
   const [gitStatus, setGitStatus] = useState(null)
   const [git, setGit] = useState({
     provider: saved.provider || 'github',
@@ -609,10 +615,28 @@ function RepoModal({ project, state, onClose, act }) {
 
   useEffect(() => { api.git.status().then(setGitStatus) }, [])
 
+  useEffect(() => {
+    if (project.repo?.remote) return
+    let alive = true
+    setDetecting(true)
+    api.git.detect(project.id).then((r) => {
+      if (!alive) return
+      if (r?.ok && r.repo?.remote) {
+        setUrl(r.repo.remote)
+        setMode('link')
+      }
+    }).finally(() => { if (alive) setDetecting(false) })
+    return () => { alive = false }
+  }, [project.id, project.repo?.remote])
+
   return (
     <Modal
       title={`Dépôt · ${project.name}`}
-      subtitle="Créer un dépôt distant avec tes réglages, ou coller l’URL d’un dépôt existant."
+      subtitle={project.repo?.url
+        ? 'Dépôt déjà lié — tu peux le modifier ou en créer un nouveau.'
+        : detecting
+          ? 'Recherche d’un remote origin dans le dossier…'
+          : 'Créer un dépôt distant avec tes réglages, ou coller l’URL d’un dépôt existant.'}
       onClose={onClose}
       footer={
         <>

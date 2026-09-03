@@ -92,6 +92,47 @@ function providerFromUrl(url) {
   return 'github'
 }
 
+export function normalizeRemote(url) {
+  return String(url || '')
+    .trim()
+    .replace(/\.git$/i, '')
+    .replace(/\/+$/, '')
+    .replace(/^git@github\.com:/i, 'https://github.com/')
+    .replace(/^ssh:\/\/git@github\.com\//i, 'https://github.com/')
+    .toLowerCase()
+}
+
+export function repoFromRemote(remote) {
+  const raw = String(remote || '').trim()
+  if (!raw) return null
+  const provider = providerFromUrl(raw)
+  const fullName = originFullName(raw) || githubFullName(raw)
+  const name = repoNameFromUrl(fullName || raw)
+  return {
+    provider,
+    name,
+    fullName: fullName || null,
+    url: pageUrl(provider, raw, name) || raw.replace(/\.git$/i, ''),
+    remote: raw,
+    visibility: null
+  }
+}
+
+/** Lit origin dans le dossier du projet et renvoie les métadonnées dépôt. */
+export async function detectRepo(dir) {
+  if (!dir || !existsSync(dir)) return null
+  const inside = await run('git rev-parse --is-inside-work-tree', dir)
+  if (!inside.ok || inside.stdout.trim() !== 'true') return null
+  const remote = await currentRemote(dir)
+  if (!remote) return null
+  return repoFromRemote(remote)
+}
+
+export function sameRepo(a, b) {
+  if (!a?.remote || !b?.remote) return false
+  return normalizeRemote(a.remote) === normalizeRemote(b.remote)
+}
+
 export function defaults(partial = {}) {
   return {
     autoCreate: true,
@@ -351,7 +392,7 @@ export async function link(win, projectId, dir, url) {
   const name = repoNameFromUrl(remote)
   return {
     ok: true,
-    repo: {
+    repo: repoFromRemote(remote) || {
       provider,
       name,
       url: pageUrl(provider, remote, name) || remote,

@@ -57,6 +57,7 @@ const api = {
     push: invoke('git:push'),
     pull: invoke('git:pull'),
     link: invoke('git:link'),
+    detect: invoke('git:detect'),
     list: invoke('git:list'),
     clone: invoke('git:clone')
   },
