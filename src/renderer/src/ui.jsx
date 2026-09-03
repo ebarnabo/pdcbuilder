@@ -232,8 +232,11 @@ export function LibraryPicker({
   query = '',
   onQueryChange,
   showScores = false,
-  empty
+  empty,
+  layout = 'accordion'
 }) {
+  const [activeCat, setActiveCat] = useState(null)
+
   if (!categories?.length) {
     return empty || (
       <p className="card-desc" style={{ margin: 0 }}>Aucune librairie compatible.</p>
@@ -241,6 +244,120 @@ export function LibraryPicker({
   }
 
   const total = categories.reduce((n, c) => n + c.items.length, 0)
+  const itemByPkg = new Map(
+    categories.flatMap((cat) => cat.items.map((item) => [item.pkg, { ...item, category: cat.name }]))
+  )
+
+  const renderItem = (item) => {
+    const on = selected.includes(item.pkg)
+    const scores = showScores ? libScores(item) : null
+    return (
+      <button
+        key={item.pkg}
+        type="button"
+        className={`lib${on ? ' on' : ''}`}
+        onClick={() => onToggle(item.pkg)}
+        aria-pressed={on}
+      >
+        <span className="tick">{on && <Check size={12} strokeWidth={3.2} />}</span>
+        <span className="lib-main">
+          <strong>
+            {item.name}
+            {item.dev && <span className="chip" style={{ marginLeft: 6, height: 17, fontSize: 10 }}>dev</span>}
+          </strong>
+          <small className="mono">{item.pkg}</small>
+          <small>{item.description}</small>
+          {scores && <ScoreStrip scores={scores} />}
+        </span>
+      </button>
+    )
+  }
+
+  if (layout === 'explore') {
+    const active = activeCat ? categories.find((c) => c.id === activeCat) : null
+    const visibleCats = active ? [active] : categories
+
+    return (
+      <div className="lib-picker lib-picker--explore">
+        <div className="lib-picker-toolbar">
+          {onQueryChange && (
+            <SearchBox value={query} onChange={onQueryChange} placeholder="Chercher un paquet, une catégorie…" />
+          )}
+          <span className="chip">{total} paquet{total > 1 ? 's' : ''}</span>
+        </div>
+
+        {selected.length > 0 && (
+          <div className="lib-selected-bar" aria-label="Librairies sélectionnées">
+            {selected.map((pkg) => {
+              const item = itemByPkg.get(pkg)
+              if (!item) return null
+              return (
+                <button
+                  key={pkg}
+                  type="button"
+                  className="lib-selected-chip"
+                  onClick={() => onToggle(pkg)}
+                  title={`Retirer ${item.name}`}
+                >
+                  <span>{item.name}</span>
+                  <X size={12} aria-hidden />
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        <div className="lib-cat-tabs" role="tablist" aria-label="Catégories">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={!active}
+            className={`lib-cat-tab${!active ? ' on' : ''}`}
+            onClick={() => setActiveCat(null)}
+          >
+            Toutes
+            <span className="lib-cat-count">{total}</span>
+          </button>
+          {categories.map((cat) => {
+            const count = cat.items.filter((i) => selected.includes(i.pkg)).length
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                role="tab"
+                aria-selected={activeCat === cat.id && Boolean(active)}
+                className={`lib-cat-tab${activeCat === cat.id && active ? ' on' : ''}`}
+                onClick={() => setActiveCat(cat.id)}
+              >
+                {cat.name}
+                <span className="lib-cat-count">{cat.items.length}</span>
+                {count > 0 && <span className="lib-cat-picked">{count}</span>}
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="lib-explore-scroll">
+          {visibleCats.map((cat) => (
+            <section className="lib-explore-section" key={cat.id}>
+              {!active && (
+                <header className="lib-explore-section-head">
+                  <h5>{cat.name}</h5>
+                  <p>{cat.description}</p>
+                </header>
+              )}
+              {active && cat.description && (
+                <p className="lib-explore-cat-desc">{cat.description}</p>
+              )}
+              <div className="lib-explore-grid">
+                {cat.items.map((item) => renderItem(item))}
+              </div>
+            </section>
+          ))}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="lib-picker">
@@ -281,30 +398,7 @@ export function LibraryPicker({
               </button>
               {open && (
                 <div className="lib-body">
-                  {cat.items.map((item) => {
-                    const on = selected.includes(item.pkg)
-                    const scores = showScores ? libScores(item) : null
-                    return (
-                      <button
-                        key={item.pkg}
-                        type="button"
-                        className={`lib${on ? ' on' : ''}`}
-                        onClick={() => onToggle(item.pkg)}
-                        aria-pressed={on}
-                      >
-                        <span className="tick">{on && <Check size={12} strokeWidth={3.2} />}</span>
-                        <span className="lib-main">
-                          <strong>
-                            {item.name}
-                            {item.dev && <span className="chip" style={{ marginLeft: 6, height: 17, fontSize: 10 }}>dev</span>}
-                          </strong>
-                          <small className="mono">{item.pkg}</small>
-                          <small>{item.description}</small>
-                          {scores && <ScoreStrip scores={scores} />}
-                        </span>
-                      </button>
-                    )
-                  })}
+                  {cat.items.map((item) => renderItem(item))}
                 </div>
               )}
             </div>

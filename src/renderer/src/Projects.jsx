@@ -391,7 +391,6 @@ function NewProject({ state, onClose, onDone }) {
   const [databaseId, setDatabaseId] = useState(state.database?.defaultId || 'none')
   const [provision, setProvision] = useState(state.database?.autoCreate !== false)
   const [cloudReady, setCloudReady] = useState(false)
-  const [open, setOpen] = useState([])
   const [workspace, setWorkspace] = useState(state.workspace)
   const [gitStatus, setGitStatus] = useState(null)
   const [themes, setThemes] = useState([])
@@ -417,7 +416,6 @@ function NewProject({ state, onClose, onDone }) {
 
   useEffect(() => {
     setLibs((l) => keepCompatible(l, state.libraries, fw))
-    setOpen(compatible.slice(0, 2).map((c) => c.id))
   }, [frameworkId, state.libraries])
 
   const applyBlueprint = (id) => {
@@ -432,15 +430,12 @@ function NewProject({ state, onClose, onDone }) {
     setThemes(bp.themes || [])
   }
 
-  const openAll = () => setOpen(visibleLibs.map((c) => c.id))
-  const closeAll = () => setOpen([])
-
   return (
     <Modal
       title="Nouveau projet"
       subtitle="Choisis la stack, les librairies, puis l’emplacement. Le reste est automatique."
       onClose={onClose}
-      width="min(920px, 100%)"
+      width="min(1080px, 100%)"
       footer={
         <>
           <div className="new-project-foot">
@@ -506,26 +501,26 @@ function NewProject({ state, onClose, onDone }) {
         <ProvisionToggle databaseId={databaseId} ready={cloudReady} value={provision} onChange={setProvision} />
       </section>
 
-      <section className="form-section form-section-grow">
-        <h4>Librairies</h4>
-        <Field
-          label={libs.length ? `${libs.length} sélectionnée${libs.length > 1 ? 's' : ''}` : 'Catalogue'}
-          hint={fw ? `Filtré pour ${fw.name} — paquets incompatibles masqués.` : undefined}
-        >
-          <LibraryPicker
-            categories={visibleLibs}
-            selected={libs}
-            openIds={open}
-            query={libQuery}
-            onQueryChange={setLibQuery}
-            onOpenAll={openAll}
-            onCloseAll={closeAll}
-            showScores
-            onToggleGroup={(id) => setOpen((o) => (o.includes(id) ? o.filter((x) => x !== id) : [...o, id]))}
-            onToggle={(pkg) => setLibs((l) => (l.includes(pkg) ? l.filter((x) => x !== pkg) : [...l, pkg]))}
-            empty={<p className="card-desc" style={{ margin: 0 }}>Aucun paquet ne correspond à ta recherche.</p>}
-          />
-        </Field>
+      <section className="form-section form-section-libraries">
+        <div className="form-section-top">
+          <div>
+            <h4>Librairies</h4>
+            <p className="form-section-lead">Optionnel — ajoute des paquets dès la création. Clique pour sélectionner.</p>
+          </div>
+          {libs.length > 0 && (
+            <span className="chip accent"><Package size={11} /> {libs.length} sélectionnée{libs.length > 1 ? 's' : ''}</span>
+          )}
+        </div>
+        <LibraryPicker
+          layout="explore"
+          categories={visibleLibs}
+          selected={libs}
+          query={libQuery}
+          onQueryChange={setLibQuery}
+          showScores
+          onToggle={(pkg) => setLibs((l) => (l.includes(pkg) ? l.filter((x) => x !== pkg) : [...l, pkg]))}
+          empty={<p className="card-desc" style={{ margin: 0 }}>Aucun paquet ne correspond à ta recherche.</p>}
+        />
       </section>
 
       <details className="form-advanced">
@@ -571,18 +566,13 @@ function AddLibs({ project, state, onClose, onDone }) {
       .filter((c) => c.items.length),
     libQuery
   ), [state.libraries, fw, project.libs, libQuery])
-  const [open, setOpen] = useState([])
-
-  useEffect(() => {
-    setOpen(cats.slice(0, 2).map((c) => c.id))
-  }, [cats.length, fw?.id])
 
   return (
     <Modal
       title={`Ajouter des librairies à ${project.name}`}
       subtitle={fw ? `Paquets compatibles avec ${fw.name}, absents de ce projet.` : 'Installation via npm dans le projet existant.'}
       onClose={onClose}
-      width="min(880px, 100%)"
+      width="min(1080px, 100%)"
       footer={
         <>
           <button className="btn ghost" onClick={onClose}>Annuler</button>
@@ -593,15 +583,12 @@ function AddLibs({ project, state, onClose, onDone }) {
       }
     >
       <LibraryPicker
+        layout="explore"
         categories={cats}
         selected={libs}
-        openIds={open}
         query={libQuery}
         onQueryChange={setLibQuery}
-        onOpenAll={() => setOpen(cats.map((c) => c.id))}
-        onCloseAll={() => setOpen([])}
         showScores
-        onToggleGroup={(id) => setOpen((o) => (o.includes(id) ? o.filter((x) => x !== id) : [...o, id]))}
         onToggle={(pkg) => setLibs((l) => (l.includes(pkg) ? l.filter((x) => x !== pkg) : [...l, pkg]))}
       />
     </Modal>
