@@ -1,7 +1,7 @@
 import { spawn } from 'child_process'
 import { homedir, platform } from 'os'
 import { join } from 'path'
-import { existsSync } from 'fs'
+import { existsSync, readdirSync, statSync } from 'fs'
 
 const isWin = platform() === 'win32'
 
@@ -121,6 +121,7 @@ export function adaptCommand(cmd, pmId = 'npm') {
   }
   if (pmId !== 'npm') {
     c = c.replace(/--packageManager\s+npm\b/g, `--packageManager ${pmId}`)
+    c = c.replace(/--use-npm\b/g, `--use-${pmId}`)
   }
   return c
 }
@@ -131,6 +132,23 @@ export function installForPath(dir, fallbackPm = 'npm') {
   if (existsSync(join(dir, 'bun.lockb')) || existsSync(join(dir, 'bun.lock'))) return 'bun install'
   if (existsSync(join(dir, 'package-lock.json'))) return 'npm install'
   return installCommand(fallbackPm)
+}
+
+/** Trouve le dossier racine npm (gère un sous-dossier créé par erreur par le scaffold). */
+export function resolveProjectRoot(dir) {
+  if (!dir || !existsSync(dir)) return null
+  if (existsSync(join(dir, 'package.json'))) return dir
+  try {
+    for (const name of readdirSync(dir)) {
+      const child = join(dir, name)
+      if (statSync(child).isDirectory() && existsSync(join(child, 'package.json'))) return child
+    }
+  } catch { /* ignore */ }
+  return null
+}
+
+export function needsInstall(dir) {
+  return Boolean(dir && existsSync(join(dir, 'package.json')) && !existsSync(join(dir, 'node_modules')))
 }
 
 export function globalInstallCommand(id) {

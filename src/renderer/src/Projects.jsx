@@ -362,6 +362,11 @@ function ProjectMenu({ project: p, anchor, editor, onClose, onDuplicate, onDelet
       )}
       <hr />
       <button onClick={() => run(() => onAddLibs(p))}><Package size={15} /> Ajouter des librairies</button>
+      {(p.status === 'error' || p.status === 'scaffolding') && (
+        <button onClick={() => run(() => act(() => api.project.repair(p.id), 'Projet régénéré'))}>
+          <Hammer size={15} /> Régénérer le scaffold
+        </button>
+      )}
       <button onClick={() => run(() => onDatabase(p))}><Database size={15} /> Configurer la base</button>
       <button onClick={() => run(() => onThemes(p))}><Tag size={15} /> Thèmes</button>
       <button onClick={() => run(() => onDuplicate(p))}><Copy size={15} /> Dupliquer</button>

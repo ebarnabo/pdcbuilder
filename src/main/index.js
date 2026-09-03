@@ -33,6 +33,48 @@ const slug = (s) =>
   String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'projet'
 
+function cleanupBrokenScaffold(path) {
+  if (!existsSync(path) || existsSync(join(path, 'package.json'))) return
+  try { rmSync(path, { recursive: true, force: true }) } catch { /* ignore */ }
+}
+
+function patchProject(id, fields) {
+  const s = store.read()
+  store.patch({ projects: s.projects.map((p) => (p.id === id ? { ...p, ...fields } : p)) })
+}
+
+async function installProjectDeps(projectId, root, pmId, label = 'dépendances') {
+  const cmd = pm.installForPath(root, pmId)
+  return runner.exec(win, projectId, cmd, root, label)
+}
+
+async function ensureProjectReady(projectId, projectPath) {
+  const s = store.read()
+  const pmId = s.packageManager || 'npm'
+  let root = pm.resolveProjectRoot(projectPath)
+
+  if (!root) {
+    return {
+      ok: false,
+      error: 'package.json introuvable. Le projet n’a pas été généré correctement — supprime-le et recrée-le, ou consulte la console de création.'
+    }
+  }
+
+  if (root !== projectPath) {
+    patchProject(projectId, { path: root })
+    runner.log(win, projectId, `racine détectée : ${root}`, 'meta')
+  }
+
+  if (pm.needsInstall(root)) {
+    const res = await installProjectDeps(projectId, root, pmId)
+    if (!res.ok) {
+      return { ok: false, error: res.stderr || 'L’installation des dépendances a échoué.' }
+    }
+  }
+
+  return { ok: true, path: root }
+}
+
 function createWindow() {
   const preload = resolvePreload()
   win = new BrowserWindow({
@@ -255,10 +297,13 @@ ipcMain.handle('project:create', async (_e, payload) => {
 
   const dirName = slug(payload.name)
   const workspace = payload.workspace || s.workspace
-  const path = join(workspace, dirName)
+  let path = join(workspace, dirName)
   const id = uid()
 
-  if (existsSync(path)) return { ok: false, error: `Le dossier ${dirName} existe déjà.` }
+  if (existsSync(path) && existsSync(join(path, 'package.json'))) {
+    return { ok: false, error: `Le dossier ${dirName} existe déjà.` }
+  }
+  cleanupBrokenScaffold(path)
   mkdirSync(workspace, { recursive: true })
 
   const bp = s.blueprints.find((b) => b.id === payload.blueprintId)
@@ -282,9 +327,20 @@ ipcMain.handle('project:create', async (_e, payload) => {
   const pmId = s.packageManager || 'npm'
   const create = pm.adaptCommand(fw.create.replaceAll('{{name}}', dirName), pmId)
   let res = await runner.exec(win, id, create, workspace, `création — ${fw.name}`)
-  if (res.ok && fw.install) {
-    res = await runner.exec(win, id, pm.adaptCommand(fw.install, pmId), path, 'dépendances')
+
+  if (res.ok) {
+    const root = pm.resolveProjectRoot(path)
+    if (!root) {
+      res = { ok: false, error: 'Le scaffold n’a pas créé de package.json. Vérifie que Node.js est installé et consulte la console.' }
+    } else {
+      if (root !== path) {
+        path = root
+        patchProject(id, { path: root })
+      }
+      res = await installProjectDeps(id, root, pmId)
+    }
   }
+
   if (res.ok && project.libs.length) res = await installLibs(id, path, project.libs)
 
   if (res.ok && project.databaseId && project.databaseId !== 'none') {
@@ -328,6 +384,52 @@ ipcMain.handle('project:create', async (_e, payload) => {
   win.webContents.send('project:changed')
   docs.syncAllProjects()
   return { ok: res.ok, id, path, repo, gitError }
+})
+
+ipcMain.handle('project:repair', async (_e, id) => {
+  const s = store.read()
+  const p = s.projects.find((x) => x.id === id)
+  if (!p) return { ok: false, error: 'Projet introuvable.' }
+
+  const existing = pm.resolveProjectRoot(p.path)
+  if (existing) {
+    const ready = await ensureProjectReady(id, existing)
+    if (ready.ok) patchProject(id, { status: 'ready', path: ready.path })
+    win.webContents.send('project:changed')
+    return ready.ok ? { ok: true } : ready
+  }
+
+  const fw = s.frameworks.find((f) => f.id === p.frameworkId)
+  if (!fw) return { ok: false, error: 'Framework introuvable.' }
+
+  const dirName = basename(p.path)
+  const workspace = dirname(p.path)
+  const pmId = s.packageManager || 'npm'
+
+  cleanupBrokenScaffold(p.path)
+  patchProject(id, { status: 'scaffolding' })
+  win.webContents.send('project:changed')
+
+  const create = pm.adaptCommand(fw.create.replaceAll('{{name}}', dirName), pmId)
+  let res = await runner.exec(win, id, create, workspace, `recréation — ${fw.name}`)
+  let root = p.path
+
+  if (res.ok) {
+    root = pm.resolveProjectRoot(p.path)
+    if (!root) {
+      res = { ok: false, error: 'Le scaffold n’a pas créé de package.json. Vérifie que Node.js est installé.' }
+    } else {
+      if (root !== p.path) patchProject(id, { path: root })
+      res = await installProjectDeps(id, root, pmId)
+    }
+  }
+
+  if (res.ok && p.libs?.length) res = await installLibs(id, root, p.libs)
+
+  patchProject(id, { status: res.ok ? 'ready' : 'error', path: root })
+  win.webContents.send('project:changed')
+  docs.syncAllProjects()
+  return res.ok ? { ok: true } : { ok: false, error: res.error || res.stderr || 'Régénération échouée.' }
 })
 
 ipcMain.handle('project:import', async (_e, { path, frameworkId, name, themes }) => {
@@ -422,16 +524,25 @@ ipcMain.handle('project:add-libs', async (_e, { id, libs }) => {
 
 const fwOf = (p) => store.read().frameworks.find((f) => f.id === p.frameworkId)
 
-ipcMain.handle('run:dev', (_e, id) => {
+ipcMain.handle('run:dev', async (_e, id) => {
   const p = store.read().projects.find((x) => x.id === id)
+  if (!p) return { ok: false, error: 'Projet introuvable.' }
+  const ready = await ensureProjectReady(id, p.path)
+  if (!ready.ok) return ready
   const f = fwOf(p)
-  return runner.startDev(win, p, f?.dev || 'npm run dev')
+  const pmId = store.read().packageManager || 'npm'
+  const cmd = pm.adaptCommand(f?.dev || 'npm run dev', pmId)
+  return runner.startDev(win, { ...p, path: ready.path }, cmd)
 })
 ipcMain.handle('run:stop', (_e, id) => runner.stopDev(id))
 ipcMain.handle('run:build', async (_e, id) => {
   const p = store.read().projects.find((x) => x.id === id)
+  if (!p) return { ok: false, error: 'Projet introuvable.' }
+  const ready = await ensureProjectReady(id, p.path)
+  if (!ready.ok) return ready
   const f = fwOf(p)
-  const res = await runner.exec(win, id, f?.build || 'npm run build', p.path, 'build de production')
+  const pmId = store.read().packageManager || 'npm'
+  const res = await runner.exec(win, id, pm.adaptCommand(f?.build || 'npm run build', pmId), ready.path, 'build de production')
   if (res.ok) {
     const s = store.read()
     store.patch({ projects: s.projects.map((x) => (x.id === id ? { ...x, lastBuild: Date.now() } : x)) })
@@ -439,10 +550,15 @@ ipcMain.handle('run:build', async (_e, id) => {
   }
   return res
 })
-ipcMain.handle('run:preview', (_e, id) => {
+ipcMain.handle('run:preview', async (_e, id) => {
   const p = store.read().projects.find((x) => x.id === id)
+  if (!p) return { ok: false, error: 'Projet introuvable.' }
+  const ready = await ensureProjectReady(id, p.path)
+  if (!ready.ok) return ready
   const f = fwOf(p)
-  return runner.startDev(win, p, f?.preview || 'npm run preview')
+  const pmId = store.read().packageManager || 'npm'
+  const cmd = pm.adaptCommand(f?.preview || 'npm run preview', pmId)
+  return runner.startDev(win, { ...p, path: ready.path }, cmd)
 })
 ipcMain.handle('run:command', (_e, { id, command }) => {
   const p = store.read().projects.find((x) => x.id === id)
@@ -523,11 +639,6 @@ ipcMain.handle('blueprint:from-project', (_e, { id, name }) => {
 
 function projectById(id) {
   return store.read().projects.find((p) => p.id === id)
-}
-
-function patchProject(id, fields) {
-  const s = store.read()
-  store.patch({ projects: s.projects.map((p) => (p.id === id ? { ...p, ...fields } : p)) })
 }
 
 ipcMain.handle('git:status', () => git.status())

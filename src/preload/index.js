@@ -26,7 +26,8 @@ const api = {
     duplicate: invoke('project:duplicate'),
     remove: invoke('project:delete'),
     update: invoke('project:update'),
-    addLibs: invoke('project:add-libs')
+    addLibs: invoke('project:add-libs'),
+    repair: invoke('project:repair')
   },
   run: {
     dev: invoke('run:dev'),
