@@ -107,6 +107,8 @@ export default function App() {
   const [logs, setLogs] = useState([])
   const [consoleH, setConsoleH] = useState(0)      // 0 = replié
   const [chatOpen, setChatOpen] = useState(false)
+  const [agentProjectId, setAgentProjectId] = useState(null)
+  const [agentSeed, setAgentSeed] = useState(null)
   const [activeId, setActiveId] = useState(null)
   const [toasts, setToasts] = useState([])
   const [stuck, setStuck] = useState(false)
@@ -201,6 +203,20 @@ export default function App() {
     } else setView(id)
   }, [view])
 
+  const openAgent = useCallback((opts = {}) => {
+    const { projectId = null, prompt = '', autoSend = false } = opts
+    if (projectId) {
+      setAgentProjectId(projectId)
+      setActiveId(projectId)
+    }
+    if (prompt) {
+      setAgentSeed({ key: `${Date.now()}`, projectId: projectId || null, prompt, autoSend })
+    } else {
+      setAgentSeed(null)
+    }
+    setChatOpen(true)
+  }, [])
+
   const goSettingsSection = useCallback((sectionId) => {
     setSettingsSection(sectionId)
     setSettingsJump(`${sectionId}:${Date.now()}`)
@@ -246,13 +262,17 @@ export default function App() {
   useEffect(() => {
     const onKey = (e) => {
       const mod = e.metaKey || e.ctrlKey
-      if (mod && e.key === 'k') { e.preventDefault(); setChatOpen((v) => !v) }
+      if (mod && e.key === 'k') {
+        e.preventDefault()
+        if (chatOpen) setChatOpen(false)
+        else openAgent({ projectId: agentProjectId || activeId })
+      }
       if (mod && e.key === 'j') { e.preventDefault(); toggleConsole() }
       if (mod && e.key >= '1' && e.key <= '4') { e.preventDefault(); go(ORDER[Number(e.key) - 1]) }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [go, toggleConsole])
+  }, [go, toggleConsole, chatOpen, openAgent, agentProjectId, activeId])
 
   /* poignée de redimensionnement de la console */
   const startDrag = (e) => {
@@ -433,9 +453,9 @@ export default function App() {
         )}
 
         <div className="rail-foot">
-          <button className={`nav-item${chatOpen ? ' on' : ''}`} onClick={() => setChatOpen((v) => !v)}>
+          <button className={`nav-item${chatOpen ? ' on' : ''}`} onClick={() => (chatOpen ? setChatOpen(false) : openAgent({ projectId: agentProjectId || activeId }))}>
             <Sparkles size={17} />
-            <span className="nav-label">Assistant</span>
+            <span className="nav-label">Agent</span>
             <span className="nav-count"><span className={`ai-dot${state.ai.model ? ' live' : ''}`} /></span>
           </button>
           <button className={`nav-item${open ? ' on' : ''}`} onClick={toggleConsole}>
@@ -490,7 +510,7 @@ export default function App() {
 
         <div
           ref={contentRef}
-          className={`content${chatOpen ? ' with-chat' : ''}`}
+          className="content"
           onScroll={(e) => setStuck(e.currentTarget.scrollTop > 8)}
           style={{ paddingBottom: panelH + 48 }}
         >
@@ -504,6 +524,7 @@ export default function App() {
                 setScope={setProjectScope}
                 themeFilter={projectThemes}
                 setThemeFilter={setProjectThemes}
+                onAskAgent={openAgent}
                 focusProject={(id) => {
                   setActiveId(id)
                   setConsoleH((h) => (h < 160 ? Math.max(lastH.current || 280, 280) : h))
@@ -550,7 +571,22 @@ export default function App() {
           toast={notify}
         />
 
-        {chatOpen && <Chat state={state} refresh={refresh} toast={notify} project={active} onClose={() => setChatOpen(false)} />}
+        {chatOpen && (
+          <Chat
+            state={state}
+            refresh={refresh}
+            toast={notify}
+            project={state.projects.find((p) => p.id === (agentProjectId || activeId)) || null}
+            projectId={agentProjectId || activeId}
+            onProjectId={(id) => {
+              setAgentProjectId(id)
+              if (id) setActiveId(id)
+            }}
+            seed={agentSeed}
+            onSeedConsumed={() => setAgentSeed(null)}
+            onClose={() => setChatOpen(false)}
+          />
+        )}
       </main>
 
       {toasts.length > 0 && (

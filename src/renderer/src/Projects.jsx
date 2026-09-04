@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import {
   Play, Square, Hammer, FolderOpen, Copy, Trash2, Globe, Plus, Package,
   Code2, Layers, MoreHorizontal, FolderInput, Bookmark, Boxes, ExternalLink,
-  Github, CheckSquare, CloudUpload, CloudDownload, Link2, Database, Tag, Search, RefreshCw, GanttChart
+  Github, CheckSquare, CloudUpload, CloudDownload, Link2, Database, Tag, Search, RefreshCw, GanttChart, Sparkles
 } from 'lucide-react'
 import { Modal, Menu, Field, SearchBox, LibraryPicker, Empty, bytes, ago, shortPath, Segmented, ScoreNotes, Confirm } from './ui.jsx'
 import { GitFields, RepoChip, CloneModal } from './GitFields.jsx'
@@ -25,7 +25,8 @@ export default function Projects({
   scope = 'all',
   setScope,
   themeFilter = [],
-  setThemeFilter
+  setThemeFilter,
+  onAskAgent
 }) {
   const [query, setQuery] = useState('')
   const [creating, setCreating] = useState(false)
@@ -137,6 +138,7 @@ export default function Projects({
           onDatabase={() => setDb(detail)}
           onRepo={() => setRepo(detail)}
           refresh={refresh}
+          onAskAgent={onAskAgent}
         />
 
         {ideasFor && (
@@ -259,6 +261,7 @@ export default function Projects({
               onPush={() => setRepo(p)}
               onIdeas={() => setIdeasFor(p)}
               onStages={() => setStagesFor(p)}
+              onAskAgent={onAskAgent}
               act={act}
               focusProject={focusProject}
               toast={toast}
@@ -281,6 +284,7 @@ export default function Projects({
           onThemes={setThemesFor}
           onIdeas={setIdeasFor}
           onStages={setStagesFor}
+          onAskAgent={onAskAgent}
           onOpen={(p) => setDetailId(p.id)}
           act={act}
         />
@@ -425,7 +429,7 @@ export default function Projects({
 
 /* ─────────────────────────  carte projet  ───────────────────────── */
 
-function ProjectCard({ project: p, framework: fw, build, index, onOpen, onMenu, onTheme, onPush, onIdeas, onStages, act, focusProject, toast }) {
+function ProjectCard({ project: p, framework: fw, build, index, onOpen, onMenu, onTheme, onPush, onIdeas, onStages, onAskAgent, act, focusProject, toast }) {
   const btnRef = useRef(null)
   const remote = Boolean(p.remoteOnly)
   const busy = p.status === 'scaffolding' || p.status === 'cloning'
@@ -561,6 +565,14 @@ function ProjectCard({ project: p, framework: fw, build, index, onOpen, onMenu, 
         )}
         {!remote && (
           <>
+            <button
+              className="btn sm accent-ghost"
+              disabled={busy}
+              title="Ouvrir l’agent IA sur ce projet"
+              onClick={() => onAskAgent?.({ projectId: p.id })}
+            >
+              <Sparkles size={13} /> Agent
+            </button>
             <button className="btn sm" disabled={busy}
               onClick={() => { focusProject(p.id); act(() => api.run.build(p.id), 'Build terminé') }}>
               <Hammer size={13} /> Build
@@ -603,7 +615,7 @@ function ProjectCard({ project: p, framework: fw, build, index, onOpen, onMenu, 
   )
 }
 
-function ProjectMenu({ project: p, anchor, editor, onClose, onDuplicate, onDelete, onAddLibs, onRepo, onDatabase, onThemes, onIdeas, onStages, onOpen, act }) {
+function ProjectMenu({ project: p, anchor, editor, onClose, onDuplicate, onDelete, onAddLibs, onRepo, onDatabase, onThemes, onIdeas, onStages, onAskAgent, onOpen, act }) {
   if (!p) return null
   const run = (fn) => { onClose(); fn() }
   const remote = Boolean(p.remoteOnly)
@@ -623,6 +635,16 @@ function ProjectMenu({ project: p, anchor, editor, onClose, onDuplicate, onDelet
   return (
     <Menu anchor={anchor} onClose={onClose}>
       <button onClick={() => run(() => onOpen?.(p))}><Boxes size={15} /> Voir le détail</button>
+      <button onClick={() => run(() => onAskAgent?.({ projectId: p.id }))}>
+        <Sparkles size={15} /> Agent IA
+      </button>
+      <button onClick={() => run(() => onAskAgent?.({
+        projectId: p.id,
+        prompt: `Explique la structure du projet ${p.name} et ce que je dois ouvrir en premier.`,
+        autoSend: true
+      }))}>
+        <Sparkles size={15} /> Expliquer ce projet
+      </button>
       <button onClick={() => run(() => api.editor.open({ path: p.path, editor }))}><Code2 size={15} /> Ouvrir dans l’éditeur</button>
       <button onClick={() => run(() => api.fs.reveal(p.path))}><FolderOpen size={15} /> Révéler le dossier</button>
       <hr />

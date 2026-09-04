@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import {
   ArrowLeft, Play, Square, Hammer, Package, Plus, Github, CloudDownload, CloudUpload,
-  Globe, ExternalLink, FolderOpen, Code2, Database, CheckSquare, Tag, GanttChart
+  Globe, ExternalLink, FolderOpen, Code2, Database, CheckSquare, Tag, GanttChart, Sparkles
 } from 'lucide-react'
 import { LibraryPicker, bytes, ago, shortPath, Empty } from './ui.jsx'
 import { RepoChip } from './GitFields.jsx'
@@ -34,7 +34,8 @@ export default function ProjectDetail({
   onThemes,
   onDatabase,
   onRepo,
-  refresh
+  refresh,
+  onAskAgent
 }) {
   const [adding, setAdding] = useState(false)
   const [picked, setPicked] = useState([])
@@ -102,6 +103,13 @@ export default function ProjectDetail({
         <div className="spacer" />
         {!remote && (
           <>
+            <button
+              type="button"
+              className="btn primary"
+              onClick={() => onAskAgent?.({ projectId: p.id })}
+            >
+              <Sparkles size={15} /> Agent IA
+            </button>
             <button type="button" className="btn" onClick={() => api.editor.open({ path: p.path, editor: state.editor })}>
               <Code2 size={15} /> Éditeur
             </button>
