@@ -866,6 +866,29 @@ function projectById(id) {
   return store.read().projects.find((p) => p.id === id)
 }
 
+function recordPush(project, result = {}) {
+  const at = Date.now()
+  const entry = {
+    id: uid(),
+    projectId: project.id,
+    name: project.name,
+    repo: project.repo?.fullName || project.repo?.name || null,
+    url: result.url || project.repo?.url || null,
+    message: result.head?.message || 'Push',
+    hash: result.head?.hash || null,
+    author: result.head?.author || null,
+    at
+  }
+  const s = store.read()
+  const pushLog = [entry, ...(s.pushLog || [])].slice(0, 60)
+  store.patch({
+    pushLog,
+    projects: s.projects.map((p) => (p.id === project.id ? { ...p, lastPushAt: at } : p))
+  })
+  win.webContents.send('project:changed')
+  return entry
+}
+
 ipcMain.handle('git:status', () => git.status())
 ipcMain.handle('git:detect', async (_e, id) => {
   const p = projectById(id)
@@ -887,13 +910,24 @@ ipcMain.handle('git:publish', async (_e, { id, options }) => {
     description: `Projet ${p.name} — PDC Builder`
   })
   if (published.repo) patchProject(id, { repo: published.repo })
+  if (published.ok) {
+    const head = (await git.inspect(p.path).catch(() => null))?.head || null
+    recordPush({ ...p, repo: published.repo || p.repo }, { head, url: published.repo?.url })
+  }
   win.webContents.send('project:changed')
   return published
 })
 ipcMain.handle('git:push', async (_e, id) => {
   const p = projectById(id)
   if (!p) return { ok: false, error: 'Projet introuvable.' }
-  return git.push(win, id, p.path)
+  const result = await git.push(win, id, p.path)
+  if (result.ok) recordPush(p, result)
+  return result
+})
+ipcMain.handle('git:board', async () => {
+  const s = store.read()
+  const board = await git.board(s.projects || [])
+  return { ...board, log: s.pushLog || [] }
 })
 ipcMain.handle('git:link', async (_e, { id, url }) => {
   const p = projectById(id)

@@ -63,7 +63,8 @@ const api = {
     link: invoke('git:link'),
     detect: invoke('git:detect'),
     list: invoke('git:list'),
-    clone: invoke('git:clone')
+    clone: invoke('git:clone'),
+    board: invoke('git:board')
   },
   app: {
     updateStatus: invoke('app:update-status'),

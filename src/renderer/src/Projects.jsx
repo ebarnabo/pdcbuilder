@@ -11,6 +11,7 @@ import { ProvisionToggle } from './DatabaseCloud.jsx'
 import { librariesFor, keepCompatible, filterLibraryItems, countCatalogLibraries } from './compat.js'
 import { THEMES, ThemePicker, themeLabel, toggleTheme } from './themes.jsx'
 import { categoryLabel, isExperience } from './experienceMeta.js'
+import PushBoard from './PushBoard.jsx'
 import { api } from './bridge.js'
 
 export default function Projects({ state, refresh, toast, focusProject }) {
@@ -156,6 +157,15 @@ export default function Projects({ state, refresh, toast, focusProject }) {
           ))}
         </div>
       </div>
+
+      <PushBoard
+        projects={state.projects}
+        toast={toast}
+        act={act}
+        focusProject={focusProject}
+        onPush={setRepo}
+        refreshKey={buildKey + counts.github + (state.pushLog?.length || 0)}
+      />
 
       {list.length === 0 ? (
         <Empty

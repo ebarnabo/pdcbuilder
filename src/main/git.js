@@ -373,7 +373,13 @@ export async function push(win, projectId, dir) {
   }
   const pushed = await logged(win, projectId, 'git push -u origin HEAD', dir, 'push')
   if (!pushed.ok) return { ok: false, error: pushed.stderr || 'git push a échoué.' }
-  return { ok: true, url: pageUrl(providerFromUrl(remote), remote) }
+  const head = (await recentCommits(dir, 1))[0] || null
+  return {
+    ok: true,
+    url: pageUrl(providerFromUrl(remote), remote),
+    head,
+    branch: await currentBranch(dir)
+  }
 }
 
 export async function link(win, projectId, dir, url) {
@@ -636,4 +642,146 @@ export async function pull(win, projectId, dir) {
   const pulled = await logged(win, projectId, 'git pull --ff-only', dir, 'pull')
   if (!pulled.ok) return { ok: false, error: pulled.stderr || pulled.stdout || 'git pull a échoué (avance rapide seulement).' }
   return { ok: true, url: pageUrl(providerFromUrl(remote), remote) }
+}
+
+function parseLogLine(line) {
+  const parts = String(line || '').split('\t')
+  if (parts.length < 5) return null
+  const [hash, author, email, ts, ...rest] = parts
+  const at = Number(ts) * 1000
+  if (!hash || !Number.isFinite(at)) return null
+  return {
+    hash: hash.slice(0, 7),
+    fullHash: hash,
+    author: author || 'inconnu',
+    email: email || '',
+    at,
+    message: rest.join('\t').trim() || '(sans message)'
+  }
+}
+
+async function recentCommits(dir, limit = 5) {
+  const r = await run(`git log -n ${limit} --pretty=format:%H%x09%an%x09%ae%x09%ct%x09%s`, dir)
+  if (!r.ok || !r.stdout.trim()) return []
+  return r.stdout.trim().split(/\r?\n/).map(parseLogLine).filter(Boolean)
+}
+
+/** État local d’un dépôt pour la carte de suivi des push. */
+export async function inspect(dir) {
+  if (!dir || !existsSync(dir)) {
+    return { ok: false, error: 'Dossier introuvable.', state: 'missing' }
+  }
+  const inside = await run('git rev-parse --is-inside-work-tree', dir)
+  if (!inside.ok || inside.stdout.trim() !== 'true') {
+    return { ok: false, error: 'Pas un dépôt Git.', state: 'nogit' }
+  }
+
+  const branch = await currentBranch(dir)
+  const remote = await currentRemote(dir)
+  const repo = remote ? repoFromRemote(remote) : null
+  const dirty = await run('git status --porcelain', dir)
+  const dirtyLines = dirty.ok ? dirty.stdout.trim().split(/\r?\n/).filter(Boolean) : []
+  const dirtyCount = dirtyLines.length
+
+  let ahead = 0
+  let behind = 0
+  let upstream = null
+  if (remote) {
+    const up = await run('git rev-parse --abbrev-ref --symbolic-full-name @{u}', dir)
+    if (up.ok && up.stdout.trim()) {
+      upstream = up.stdout.trim()
+      const counts = await run('git rev-list --left-right --count HEAD...@{u}', dir)
+      if (counts.ok) {
+        const [a, b] = counts.stdout.trim().split(/\s+/).map((n) => Number(n) || 0)
+        ahead = a
+        behind = b
+      }
+    }
+  }
+
+  const commits = await recentCommits(dir, 6)
+  const head = commits[0] || null
+
+  let state = 'synced'
+  if (!remote) state = 'noremote'
+  else if (dirtyCount > 0) state = 'draft'
+  else if (ahead > 0 && behind > 0) state = 'diverged'
+  else if (ahead > 0) state = 'ahead'
+  else if (behind > 0) state = 'behind'
+  else state = 'synced'
+
+  return {
+    ok: true,
+    state,
+    branch,
+    upstream,
+    remote,
+    repo,
+    dirtyCount,
+    ahead,
+    behind,
+    head,
+    commits
+  }
+}
+
+/**
+ * Carte des push : un snapshot par projet (local ou distant).
+ * @param {Array} projects
+ */
+export async function board(projects = []) {
+  const rows = await Promise.all((projects || []).map(async (p) => {
+    const base = {
+      projectId: p.id,
+      name: p.name,
+      remoteOnly: Boolean(p.remoteOnly),
+      path: p.path || null,
+      lastPushAt: p.lastPushAt || null,
+      repo: p.repo || null
+    }
+
+    if (p.remoteOnly || p.exists === false) {
+      return {
+        ...base,
+        ok: true,
+        state: p.remoteOnly ? 'remote' : 'missing',
+        branch: null,
+        dirtyCount: 0,
+        ahead: 0,
+        behind: 0,
+        head: p.repo?.updatedAt
+          ? { at: Date.parse(p.repo.updatedAt) || null, message: 'Activité GitHub', author: '', hash: '' }
+          : null,
+        commits: []
+      }
+    }
+
+    const snap = await inspect(p.path)
+    return {
+      ...base,
+      ...snap,
+      repo: snap.repo || p.repo || null
+    }
+  }))
+
+  const order = { draft: 0, ahead: 1, diverged: 2, behind: 3, noremote: 4, remote: 5, missing: 6, nogit: 7, synced: 8 }
+  rows.sort((a, b) => {
+    const sa = order[a.state] ?? 9
+    const sb = order[b.state] ?? 9
+    if (sa !== sb) return sa - sb
+    const ta = a.head?.at || a.lastPushAt || 0
+    const tb = b.head?.at || b.lastPushAt || 0
+    return tb - ta
+  })
+
+  const summary = {
+    total: rows.length,
+    draft: rows.filter((r) => r.state === 'draft').length,
+    ahead: rows.filter((r) => r.state === 'ahead' || r.state === 'diverged').length,
+    behind: rows.filter((r) => r.state === 'behind').length,
+    synced: rows.filter((r) => r.state === 'synced').length,
+    remote: rows.filter((r) => r.state === 'remote').length
+  }
+
+  return { ok: true, at: Date.now(), summary, rows }
 }

@@ -674,6 +674,8 @@ export const DEFAULTS = {
     org: '',
     branch: 'main'
   },
+  /** Historique des push depuis l’app (suivi des travaux). */
+  pushLog: [],
   database: {
     defaultId: 'none',
     autoCreate: true,
@@ -774,7 +776,8 @@ export function read() {
           : { completed: true, version: 1, skipped: [] },
         libraries: mergeLibraries(parsed.libraries, DEFAULT_LIBRARIES),
         frameworks: mergeFrameworks(parsed.frameworks, DEFAULT_FRAMEWORKS),
-        blueprints: mergeBlueprints(parsed.blueprints, DEFAULT_EXPERIENCE_BLUEPRINTS)
+        blueprints: mergeBlueprints(parsed.blueprints, DEFAULT_EXPERIENCE_BLUEPRINTS),
+        pushLog: Array.isArray(parsed.pushLog) ? parsed.pushLog.slice(0, 60) : []
       }
     } else {
       cache = structuredClone(DEFAULTS)
