@@ -15,6 +15,7 @@ import PushBoard from './PushBoard.jsx'
 import { ChecklistModal } from './ProjectChecklist.jsx'
 import { StagesModal } from './ProjectStages.jsx'
 import ProjectDetail from './ProjectDetail.jsx'
+import ProjectPreview from './ProjectPreview.jsx'
 import { api } from './bridge.js'
 
 export default function Projects({
@@ -730,9 +731,9 @@ function NewProject({ state, onClose, onDone }) {
   return (
     <Modal
       title="Nouveau projet"
-      subtitle="Choisis une expérience, puis affine la stack. Les fichiers et le brief suivent."
+      subtitle="Choisis une expérience — l’aperçu à droite te montre le genre d’app que tu vas monter."
       onClose={onClose}
-      width="min(1080px, 100%)"
+      width="min(1180px, 100%)"
       footer={
         <>
           <div className="new-project-foot">
@@ -760,6 +761,8 @@ function NewProject({ state, onClose, onDone }) {
         </>
       }
     >
+      <div className="new-project-layout">
+        <div className="new-project-form">
       <section className="form-section">
         <h4>Identité</h4>
         <Field label="Nom du projet" hint={slug ? `Dossier : ${slug}` : 'Le dossier reprend ce nom, en minuscules.'}>
@@ -890,6 +893,11 @@ function NewProject({ state, onClose, onDone }) {
           )}
         </div>
       </details>
+        </div>
+        <aside className="new-project-aside">
+          <ProjectPreview themes={themes} blueprint={selectedBp} name={name} />
+        </aside>
+      </div>
     </Modal>
   )
 }

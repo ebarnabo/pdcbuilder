@@ -36,18 +36,23 @@ export function toggleTheme(list, id) {
 export function ThemePicker({ value = [], onChange, hint = 'Ce que le projet est. Plusieurs tags possibles.' }) {
   return (
     <Field label="Thème" hint={hint}>
-      <div className="chip-row">
-        {THEMES.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            className={`chip link${value.includes(t.id) ? ' accent' : ''}`}
-            onClick={() => onChange(toggleTheme(value, t.id))}
-            aria-pressed={value.includes(t.id)}
-          >
-            {t.label}
-          </button>
-        ))}
+      <div className="theme-pick-grid" role="group" aria-label="Thèmes du projet">
+        {THEMES.map((t) => {
+          const Icon = t.icon
+          const on = value.includes(t.id)
+          return (
+            <button
+              key={t.id}
+              type="button"
+              className={`theme-pick${on ? ' on' : ''}`}
+              onClick={() => onChange(toggleTheme(value, t.id))}
+              aria-pressed={on}
+            >
+              <Icon size={15} strokeWidth={1.8} aria-hidden />
+              <span>{t.label}</span>
+            </button>
+          )
+        })}
       </div>
     </Field>
   )
