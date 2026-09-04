@@ -1,14 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { flushSync } from 'react-dom'
-import { Boxes, Bookmark, Layers, Settings as Cog, Sparkles, Terminal, Trash2, Download, Minus, Square, X, Globe, ExternalLink } from 'lucide-react'
+import { Boxes, Bookmark, Layers, Settings as Cog, Sparkles, Terminal, Download, Minus, Square, X } from 'lucide-react'
 import Projects from './Projects.jsx'
 import Catalog from './Catalog.jsx'
 import Blueprints from './Blueprints.jsx'
 import Settings from './Settings.jsx'
 import Chat from './Chat.jsx'
 import Onboarding from './Onboarding.jsx'
+import ConsolePanel from './Console.jsx'
 import { BrandLockup, BrandMark, applyUiTheme } from './Brand.jsx'
-import { Chevron, Confirm } from './ui.jsx'
 import { api, waitForApi } from './bridge.js'
 
 const VIEWS = {
@@ -92,8 +92,6 @@ export default function App() {
   const [update, setUpdate] = useState(null)
   const [docsStatus, setDocsStatus] = useState(null)
   const [boot, setBoot] = useState('loading')
-  const [clearLogs, setClearLogs] = useState(false)
-  const logRef = useRef(null)
   const contentRef = useRef(null)
   const lastH = useRef(300)
 
@@ -160,11 +158,6 @@ export default function App() {
     const t = setTimeout(() => setBoot('ready'), 560)
     return () => clearTimeout(t)
   }, [boot])
-
-  useEffect(() => {
-    const behavior = reduced() ? 'auto' : 'smooth'
-    logRef.current?.scrollTo({ top: 1e9, behavior })
-  }, [logs, consoleH])
 
   /* changement de vue animé par l'API View Transitions */
   const go = useCallback((id) => {
@@ -246,8 +239,7 @@ export default function App() {
   }
 
   const active = state.projects.find((p) => p.id === activeId)
-  const running = state.projects.find((p) => p.status === 'running' && p.url)
-  const devUrl = active?.url || running?.url
+  const liveCount = state.projects.filter((p) => p.status === 'running' || p.status === 'starting').length
   const meta = VIEWS[view]
   const open = consoleH > 46
   const panelH = Math.max(consoleH, 46)
@@ -286,7 +278,7 @@ export default function App() {
           <button className={`nav-item${open ? ' on' : ''}`} onClick={toggleConsole}>
             <Terminal size={17} />
             <span className="nav-label">Console</span>
-            <span className="nav-count">{logs.length || ''}</span>
+            <span className="nav-count">{liveCount || logs.length || ''}</span>
           </button>
         </div>
       </nav>
@@ -344,66 +336,24 @@ export default function App() {
           </div>
         </div>
 
-        <section
-          className={`console${dragging ? ' dragging' : ''}`}
-          style={{ height: panelH }}
-          aria-label="Journal des commandes"
-        >
-          {open && <div className="console-grip" onMouseDown={startDrag} role="separator" aria-orientation="horizontal" />}
-          <div className="console-head">
-            <Terminal size={14} color="var(--text-3)" />
-            <strong>Console</strong>
-            <span style={{ color: 'var(--text-3)', fontSize: 12 }}>
-              {logs.length ? `${logs.length} lignes` : 'aucune activité'}
-            </span>
-            {devUrl && (
-              <button
-                type="button"
-                className="btn sm primary console-open-url"
-                onClick={() => api.fs.openUrl(devUrl)}
-                title={devUrl}
-              >
-                <Globe size={13} />
-                Ouvrir {devUrl.replace(/^https?:\/\//, '')}
-                <ExternalLink size={11} aria-hidden />
-              </button>
-            )}
-            <div className="spacer" />
-            {logs.length > 0 && (
-              <button className="btn icon sm ghost" aria-label="Vider la console" onClick={() => setClearLogs(true)}><Trash2 size={14} /></button>
-            )}
-            <button className="btn icon sm ghost" aria-label={open ? 'Réduire' : 'Déplier'} onClick={toggleConsole}>
-              <Chevron open={!open} size={16} />
-            </button>
-          </div>
-          {open && (
-            <div className="console-body" ref={logRef}>
-              {logs.length === 0
-                ? <span style={{ color: 'var(--text-3)' }}>Les créations, installations et builds s’affichent ici.</span>
-                : logs.map((l, i) => (
-                    <div className={`line ${l.kind}`} key={i}>
-                      <span className="who">{state.projects.find((p) => p.id === l.projectId)?.name || l.projectId}</span>
-                      <span>{l.line}</span>
-                    </div>
-                  ))}
-            </div>
-          )}
-        </section>
+        <ConsolePanel
+          state={state}
+          logs={logs}
+          height={panelH}
+          dragging={dragging}
+          onDragStart={startDrag}
+          onToggle={toggleConsole}
+          onClear={() => setLogs([])}
+          focusId={activeId}
+          onFocus={setActiveId}
+          toast={notify}
+        />
 
         {chatOpen && <Chat state={state} refresh={refresh} toast={notify} project={active} onClose={() => setChatOpen(false)} />}
       </main>
 
       {toast && <div key={toast.key} className={`toast${toast.isError ? ' err' : ''}`}>{toast.message}</div>}
       {boot !== 'ready' && <BootVeil fading={boot === 'reveal'} />}
-      {clearLogs && (
-        <Confirm
-          title="Vider la console ?"
-          subtitle={`${logs.length} ligne${logs.length > 1 ? 's' : ''} seront effacées. Les fichiers des projets ne bougent pas.`}
-          confirm="Vider"
-          onClose={() => setClearLogs(false)}
-          onConfirm={() => { setLogs([]); setClearLogs(false) }}
-        />
-      )}
       {showOnboarding && (
         <Onboarding state={state} onComplete={refresh} />
       )}

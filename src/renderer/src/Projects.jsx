@@ -464,9 +464,29 @@ function ProjectCard({ project: p, framework: fw, build, index, onMenu, onTheme,
               onClick={() => { focusProject(p.id); act(() => api.run.build(p.id), 'Build terminé') }}>
               <Hammer size={13} /> Build
             </button>
+            {p.repo?.url && !needsPush && (
+              <button
+                className="btn sm"
+                disabled={busy}
+                onClick={() => { focusProject(p.id); act(() => api.git.pull(p.id), 'Code récupéré depuis GitHub') }}
+                title="git pull — récupérer les derniers changements"
+              >
+                <CloudDownload size={13} /> Pull
+              </button>
+            )}
             {needsPush && (
               <button className="btn sm" onClick={onPush}>
                 <CloudUpload size={13} /> Push GitHub
+              </button>
+            )}
+            {!needsPush && p.repo?.url && (
+              <button
+                className="btn sm ghost"
+                disabled={busy || live}
+                onClick={() => { focusProject(p.id); act(() => api.git.push(p.id), 'Push envoyé') }}
+                title="Pousser les commits locaux"
+              >
+                <CloudUpload size={13} /> Push
               </button>
             )}
             <button className="btn sm ghost" onClick={() => act(() => api.run.openBuild(p.id))}>

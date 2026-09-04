@@ -35,6 +35,8 @@ const api = {
   run: {
     dev: invoke('run:dev'),
     stop: invoke('run:stop'),
+    stopAll: invoke('run:stop-all'),
+    list: invoke('run:list'),
     build: invoke('run:build'),
     preview: invoke('run:preview'),
     command: invoke('run:command'),

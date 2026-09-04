@@ -156,14 +156,24 @@ export function stopDev(projectId) {
   }
   running.delete(projectId)
   lastLog.delete(projectId)
-  return { ok: true }
+  return { ok: true, projectId }
+}
+
+export function listRunning() {
+  return [...running.entries()].map(([projectId, entry]) => ({
+    projectId,
+    status: entry.url ? 'running' : 'starting',
+    url: entry.url || null
+  }))
 }
 
 export function devState(projectId) {
   const entry = running.get(projectId)
-  return entry ? { status: 'running', url: entry.url } : { status: 'stopped', url: null }
+  return entry ? { status: entry.url ? 'running' : 'starting', url: entry.url || null } : { status: 'stopped', url: null }
 }
 
 export function stopAll() {
-  ;[...running.keys()].forEach(stopDev)
+  const ids = [...running.keys()]
+  ids.forEach(stopDev)
+  return { ok: true, stopped: ids }
 }

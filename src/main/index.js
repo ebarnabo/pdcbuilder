@@ -770,7 +770,23 @@ ipcMain.handle('run:dev', async (_e, id) => {
   const cmd = pm.adaptCommand(f?.dev || 'npm run dev', pmId)
   return runner.startDev(win, { ...p, path: ready.path }, cmd)
 })
-ipcMain.handle('run:stop', (_e, id) => runner.stopDev(id))
+ipcMain.handle('run:stop', (_e, id) => {
+  const r = runner.stopDev(id)
+  if (r.ok) {
+    runner.log(win, id, '▸ arrêté manuellement', 'meta')
+    win.webContents.send('proc:state', { projectId: id, status: 'stopped', url: null })
+  }
+  return r
+})
+ipcMain.handle('run:stop-all', () => {
+  const r = runner.stopAll()
+  for (const id of r.stopped || []) {
+    runner.log(win, id, '▸ arrêté (tous)', 'meta')
+    win.webContents.send('proc:state', { projectId: id, status: 'stopped', url: null })
+  }
+  return r
+})
+ipcMain.handle('run:list', () => runner.listRunning())
 ipcMain.handle('run:build', async (_e, id) => {
   const p = store.read().projects.find((x) => x.id === id)
   if (!p) return { ok: false, error: 'Projet introuvable.' }
