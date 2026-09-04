@@ -101,6 +101,12 @@ const api = {
     update: invoke('pm:update'),
     updateAll: invoke('pm:update-all')
   },
+  toolchain: {
+    status: invoke('toolchain:status'),
+    install: invoke('toolchain:install'),
+    uninstall: invoke('toolchain:uninstall'),
+    update: invoke('toolchain:update')
+  },
   preferences: {
     path: invoke('preferences:path'),
     open: invoke('preferences:open')

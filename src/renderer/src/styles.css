@@ -1006,6 +1006,37 @@ html.lock-scroll .content { overflow: hidden; }
 .pm-card-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .pm-install { align-self: flex-start; }
 
+.tc-group { margin-top: 16px; display: flex; flex-direction: column; gap: 10px; }
+.tc-group-head h5 {
+  margin: 0; font-size: 12px; font-weight: 650;
+  letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-3);
+}
+.tc-group-head p {
+  margin: 4px 0 0; font-size: 12.5px; color: var(--text-3); line-height: 1.4; max-width: 72ch;
+}
+.tc-grid {
+  display: grid; gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+.tc-card {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 12px 14px; border-radius: var(--r-md);
+  background: var(--well); box-shadow: inset 0 0 0 1px var(--line);
+}
+.tc-card.on { box-shadow: inset 0 0 0 1px var(--accent-edge); background: var(--accent-soft); }
+.tc-card-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.tc-card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.tc-card-head strong { font-size: 14.5px; font-weight: 650; letter-spacing: -0.02em; }
+.tc-tag { font-size: 11.5px; color: var(--accent); font-weight: 600; }
+.tc-blurb { margin: 0; font-size: 12.5px; line-height: 1.45; color: var(--text-2); }
+.tc-path {
+  display: block; margin-top: 2px;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px; color: var(--text-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tc-card-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; }
+
 .db-explain {
   margin-top: 10px; padding: 12px 14px;
   background: var(--accent-wash); border-radius: var(--r-md);

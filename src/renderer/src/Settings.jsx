@@ -5,6 +5,7 @@ import { GitFields, GitStatus } from './GitFields.jsx'
 import { DatabasePicker } from './DatabaseFields.jsx'
 import { DatabaseAccounts } from './DatabaseCloud.jsx'
 import { PackageManagerPicker } from './PackageManagerPicker.jsx'
+import { ToolchainPanel } from './ToolchainPanel.jsx'
 import { UI_THEMES, applyUiTheme, BrandMark } from './Brand.jsx'
 import { api } from './bridge.js'
 
@@ -61,7 +62,7 @@ export default function Settings({ state, refresh, toast, update, docsStatus }) 
       <div className="section-head">
         <div style={{ flex: 1 }}>
           <h3>Réglages</h3>
-          <p>Atelier, dépôts, comptes des bases (CLI / MCP) et moteur d’IA.</p>
+          <p>Atelier, SDK (Python…), dépôts, comptes des bases (CLI / MCP) et moteur d’IA.</p>
         </div>
       </div>
 
@@ -119,6 +120,9 @@ export default function Settings({ state, refresh, toast, update, docsStatus }) 
           onChange={(id) => { setPackageManager(id); save({ packageManager: id }) }}
           toast={toast}
         />
+        <div style={{ marginTop: 20 }}>
+          <ToolchainPanel toast={toast} />
+        </div>
       </div>
 
       <div className="card">

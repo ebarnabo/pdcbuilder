@@ -13,6 +13,7 @@ import * as preferences from './preferences.js'
 import * as database from './database.js'
 import * as dbcloud from './dbcloud.js'
 import * as pm from './pm.js'
+import * as toolchain from './toolchain.js'
 import * as scan from './scan.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -266,6 +267,23 @@ ipcMain.handle('pm:update-all', async () => {
     if (!r.ok) return { ok: false, updated: results.filter((x) => x.ok).length, results, error: r.error || r.stderr || `Échec sur ${m.name}` }
   }
   return { ok: true, updated: results.length, results }
+})
+
+ipcMain.handle('toolchain:status', async () => toolchain.status())
+ipcMain.handle('toolchain:install', async (_e, id) => {
+  const cmd = toolchain.installCommand(id)
+  if (!cmd) return { ok: false, error: 'Installation indisponible pour cet outil sur cette plateforme.' }
+  return runner.exec(win, 'system', cmd, homedir(), `installation — ${toolchain.labelFor(id)}`)
+})
+ipcMain.handle('toolchain:uninstall', async (_e, id) => {
+  const cmd = toolchain.uninstallCommand(id)
+  if (!cmd) return { ok: false, error: 'Désinstallation indisponible pour cet outil sur cette plateforme.' }
+  return runner.exec(win, 'system', cmd, homedir(), `désinstallation — ${toolchain.labelFor(id)}`)
+})
+ipcMain.handle('toolchain:update', async (_e, id) => {
+  const cmd = toolchain.updateCommand(id)
+  if (!cmd) return { ok: false, error: 'Mise à jour indisponible pour cet outil.' }
+  return runner.exec(win, 'system', cmd, homedir(), `mise à jour — ${toolchain.labelFor(id)}`)
 })
 
 /* ─────────────────────  système de fichiers  ───────────────────── */
