@@ -95,7 +95,9 @@ const api = {
   },
   pm: {
     status: invoke('pm:status'),
-    install: invoke('pm:install')
+    install: invoke('pm:install'),
+    update: invoke('pm:update'),
+    updateAll: invoke('pm:update-all')
   },
   preferences: {
     path: invoke('preferences:path'),

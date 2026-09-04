@@ -12,7 +12,9 @@ export const MANAGERS = [
     tag: 'Inclus avec Node',
     blurb: 'Le classique. Zéro config, compatible avec tous les tutos.',
     metrics: { vitesse: 3, disque: 2, monorepo: 2, simplicite: 5 },
-    installGlobal: null
+    npmPkg: 'npm',
+    installGlobal: null,
+    updateGlobal: 'npm install -g npm@latest'
   },
   {
     id: 'pnpm',
@@ -20,7 +22,9 @@ export const MANAGERS = [
     tag: 'Rapide · disque léger',
     blurb: 'Store partagé et liens durs. Très bon pour les monorepos.',
     metrics: { vitesse: 5, disque: 5, monorepo: 5, simplicite: 3 },
-    installGlobal: 'npm install -g pnpm'
+    npmPkg: 'pnpm',
+    installGlobal: 'npm install -g pnpm',
+    updateGlobal: 'npm install -g pnpm@latest'
   },
   {
     id: 'yarn',
@@ -28,7 +32,9 @@ export const MANAGERS = [
     tag: 'Classique moderne',
     blurb: 'Berry ou Classic. Bon équilibre vitesse / écosystème.',
     metrics: { vitesse: 4, disque: 4, monorepo: 4, simplicite: 4 },
-    installGlobal: 'npm install -g yarn'
+    npmPkg: 'yarn',
+    installGlobal: 'npm install -g yarn',
+    updateGlobal: 'npm install -g yarn@latest'
   },
   {
     id: 'bun',
@@ -36,7 +42,9 @@ export const MANAGERS = [
     tag: 'Ultra rapide',
     blurb: 'Runtime + installateur. Idéal pour itérer vite, écosystème plus jeune.',
     metrics: { vitesse: 5, disque: 4, monorepo: 3, simplicite: 3 },
-    installGlobal: 'npm install -g bun'
+    npmPkg: 'bun',
+    installGlobal: 'npm install -g bun',
+    updateGlobal: 'npm install -g bun@latest'
   }
 ]
 
@@ -68,6 +76,32 @@ async function readVersion(name) {
   const r = await run(`${name} --version`, homedir())
   if (!r.ok) return null
   return (r.stdout || r.stderr || '').trim().split(/\r?\n/)[0] || null
+}
+
+async function readLatest(npmPkg) {
+  if (!npmPkg) return null
+  const r = await run(`npm view ${npmPkg} version`, homedir())
+  if (!r.ok) return null
+  return (r.stdout || '').trim().split(/\r?\n/)[0] || null
+}
+
+/** Compare deux versions (semver simple). Renvoie true si current < latest. */
+export function isOutdated(current, latest) {
+  if (!current || !latest) return false
+  const parse = (v) => String(v).replace(/^v/i, '').split(/[.+-]/).map((n) => {
+    const x = parseInt(n, 10)
+    return Number.isFinite(x) ? x : 0
+  })
+  const a = parse(current)
+  const b = parse(latest)
+  const len = Math.max(a.length, b.length)
+  for (let i = 0; i < len; i++) {
+    const x = a[i] || 0
+    const y = b[i] || 0
+    if (x < y) return true
+    if (x > y) return false
+  }
+  return false
 }
 
 export function metricLabels() {
@@ -155,11 +189,28 @@ export function globalInstallCommand(id) {
   return byId(id).installGlobal
 }
 
+export function globalUpdateCommand(id) {
+  return byId(id).updateGlobal || null
+}
+
 export async function status(defaultId = 'npm') {
-  const rows = await Promise.all(MANAGERS.map(async (m) => ({
-    ...m,
-    installed: m.id === 'npm' ? true : await hasCommand(m.id),
-    version: m.id === 'npm' ? await readVersion('npm') : await readVersion(m.id)
-  })))
-  return { defaultId: defaultId || 'npm', managers: rows }
+  const rows = await Promise.all(MANAGERS.map(async (m) => {
+    const installed = m.id === 'npm' ? true : await hasCommand(m.id)
+    const version = installed ? await readVersion(m.id === 'npm' ? 'npm' : m.id) : null
+    const latest = installed ? await readLatest(m.npmPkg || m.id) : null
+    const outdated = Boolean(installed && isOutdated(version, latest))
+    return {
+      ...m,
+      installed,
+      version,
+      latest,
+      outdated,
+      canUpdate: Boolean(m.updateGlobal && installed)
+    }
+  }))
+  return {
+    defaultId: defaultId || 'npm',
+    managers: rows,
+    outdatedCount: rows.filter((r) => r.outdated).length
+  }
 }

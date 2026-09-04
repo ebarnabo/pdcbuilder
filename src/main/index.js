@@ -247,6 +247,26 @@ ipcMain.handle('pm:install', async (_e, id) => {
   if (!cmd) return { ok: false, error: 'Ce gestionnaire est déjà inclus ou inconnu.' }
   return runner.exec(win, 'system', cmd, homedir(), `installation — ${id}`)
 })
+ipcMain.handle('pm:update', async (_e, id) => {
+  const cmd = pm.globalUpdateCommand(id)
+  if (!cmd) return { ok: false, error: 'Mise à jour indisponible pour ce gestionnaire.' }
+  const label = id === 'npm' ? 'mise à jour — npm' : `mise à jour — ${id}`
+  return runner.exec(win, 'system', cmd, homedir(), label)
+})
+ipcMain.handle('pm:update-all', async () => {
+  const s = store.read()
+  const st = await pm.status(s.packageManager || 'npm')
+  const targets = (st.managers || []).filter((m) => m.outdated && m.updateGlobal)
+  if (!targets.length) return { ok: true, updated: 0, skipped: true }
+  const results = []
+  for (const m of targets) {
+    const cmd = pm.globalUpdateCommand(m.id)
+    const r = await runner.exec(win, 'system', cmd, homedir(), `mise à jour — ${m.id}`)
+    results.push({ id: m.id, ok: r.ok, error: r.error || r.stderr || null })
+    if (!r.ok) return { ok: false, updated: results.filter((x) => x.ok).length, results, error: r.error || r.stderr || `Échec sur ${m.name}` }
+  }
+  return { ok: true, updated: results.length, results }
+})
 
 /* ─────────────────────  système de fichiers  ───────────────────── */
 
