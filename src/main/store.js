@@ -98,6 +98,21 @@ export const DEFAULT_FRAMEWORKS = [
         paid: { n: 2, note: 'Stores : 15–30 % si tu vends.' },
         exit: { n: 1, note: 'Pas de plafond cloud. C’est un binaire.' }
       }
+    }),
+  fw('payload', 'Payload CMS', 'CMS', 'Next.js + admin headless TypeScript.',
+    'npx --yes create-payload-app@latest -n {{name}} -t blank --db sqlite --db-accept-recommended --no-agent --no-deps --no-git --use-npm',
+    {
+      family: 'react',
+      kind: 'cms',
+      outDir: '.next',
+      preview: 'npm run start',
+      requires: ['node', 'git'],
+      scores: {
+        perf: { n: 4, note: 'Next + admin React. Solide en éditorial / ecommerce.' },
+        free: { n: 5, note: 'OSS MIT. Self-host sans licence.' },
+        paid: { n: 3, note: 'Tu paies l’hôte + la base (SQLite local = 0).' },
+        exit: { n: 2, note: 'Code et schémas restent chez toi.' }
+      }
     })
 ]
 
@@ -721,6 +736,10 @@ function mergeFrameworks(saved, defaults) {
     if (d) {
       merged.description = d.description
       if (d.scores) merged.scores = d.scores
+      if (d.kind) merged.kind = d.kind
+      if (d.create && d.builtin) merged.create = d.create
+      if (d.outDir) merged.outDir = d.outDir
+      if (d.preview) merged.preview = d.preview
     }
     next.push(merged)
     seen.add(f.id)

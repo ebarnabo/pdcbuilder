@@ -15,6 +15,7 @@ import * as dbcloud from './dbcloud.js'
 import * as pm from './pm.js'
 import * as toolchain from './toolchain.js'
 import * as scan from './scan.js'
+import * as payloadCms from './payload.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const isMac = platform() === 'darwin'
@@ -314,6 +315,12 @@ ipcMain.handle('toolchain:update', async (_e, id) => {
   return runner.exec(win, 'system', cmd, homedir(), `mise à jour — ${toolchain.labelFor(id)}`)
 })
 
+ipcMain.handle('payload:prereqs', async (_e, opts) => payloadCms.checkPrereqs(opts?.db || 'sqlite'))
+ipcMain.handle('payload:options', () => ({
+  templates: payloadCms.TEMPLATES,
+  databases: payloadCms.DATABASES
+}))
+
 /* ─────────────────────  système de fichiers  ───────────────────── */
 
 ipcMain.handle('fs:pick-dir', async () => {
@@ -440,7 +447,32 @@ ipcMain.handle('project:create', async (_e, payload) => {
   win.webContents.send('project:changed')
 
   const pmId = s.packageManager || 'npm'
-  const create = pm.adaptCommand(fw.create.replaceAll('{{name}}', dirName), pmId)
+  const isPayload = payloadCms.isPayloadFramework(fw)
+  const payloadTemplate = isPayload ? payloadCms.normalizeTemplate(payload.payloadTemplate) : null
+  const payloadDb = isPayload ? payloadCms.normalizeDb(payload.payloadDb) : null
+
+  if (isPayload) {
+    const prereqs = await payloadCms.checkPrereqs(payloadDb)
+    if (!prereqs.ready && !payload.force) {
+      const sErr = store.read()
+      store.patch({ projects: sErr.projects.filter((p) => p.id !== id) })
+      win.webContents.send('project:changed')
+      return {
+        ok: false,
+        error: `Prérequis Payload manquants : ${prereqs.missing.join(', ')}. Installe-les depuis la fiche création, puis réessaie.`,
+        prereqs
+      }
+    }
+  }
+
+  const create = isPayload
+    ? pm.adaptCommand(payloadCms.buildCreateCommand({
+      name: dirName,
+      template: payloadTemplate,
+      db: payloadDb,
+      pmId
+    }), pmId)
+    : pm.adaptCommand(fw.create.replaceAll('{{name}}', dirName), pmId)
   let res = await runner.exec(win, id, create, workspace, `création — ${fw.name}`)
 
   if (res.ok) {
@@ -458,7 +490,19 @@ ipcMain.handle('project:create', async (_e, payload) => {
 
   if (res.ok && project.libs.length) res = await installLibs(id, path, project.libs)
 
-  if (res.ok && project.databaseId && project.databaseId !== 'none') {
+  if (res.ok && isPayload) {
+    const fin = payloadCms.finalize(path, {
+      template: payloadTemplate,
+      db: payloadDb,
+      name: dirName
+    })
+    for (const rel of fin.files || []) runner.log(win, id, `config Payload : ${rel}`, 'ok')
+    patchProject(id, {
+      payloadTemplate,
+      payloadDb,
+      databaseId: 'none'
+    })
+  } else if (res.ok && project.databaseId && project.databaseId !== 'none') {
     const wantCloud = payload.provision != null ? Boolean(payload.provision) : s.database?.autoCreate !== false
     const dbRes = await applyDatabase(id, path, fw.id, project.databaseId, { provision: wantCloud, name: dirName })
     if (!dbRes.ok) res = dbRes
@@ -526,7 +570,15 @@ ipcMain.handle('project:repair', async (_e, id) => {
   patchProject(id, { status: 'scaffolding' })
   win.webContents.send('project:changed')
 
-  const create = pm.adaptCommand(fw.create.replaceAll('{{name}}', dirName), pmId)
+  const isPayload = payloadCms.isPayloadFramework(fw)
+  const create = isPayload
+    ? pm.adaptCommand(payloadCms.buildCreateCommand({
+      name: dirName,
+      template: p.payloadTemplate || 'blank',
+      db: p.payloadDb || 'sqlite',
+      pmId
+    }), pmId)
+    : pm.adaptCommand(fw.create.replaceAll('{{name}}', dirName), pmId)
   let res = await runner.exec(win, id, create, workspace, `recréation — ${fw.name}`)
   let root = p.path
 
@@ -541,6 +593,14 @@ ipcMain.handle('project:repair', async (_e, id) => {
   }
 
   if (res.ok && p.libs?.length) res = await installLibs(id, root, p.libs)
+
+  if (res.ok && isPayload) {
+    payloadCms.finalize(root, {
+      template: p.payloadTemplate || 'blank',
+      db: p.payloadDb || 'sqlite',
+      name: dirName
+    })
+  }
 
   patchProject(id, { status: res.ok ? 'ready' : 'error', path: root })
   win.webContents.send('project:changed')

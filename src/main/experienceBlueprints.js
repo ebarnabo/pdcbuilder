@@ -650,6 +650,41 @@ import '../styles/tokens.css'
       </main>
     </div>`)
     ]
+  },
+  {
+    id: 'xp-payload-cms',
+    builtin: true,
+    kind: 'experience',
+    category: 'content',
+    name: 'CMS Payload',
+    tagline: 'Admin headless, contenu sous contrôle',
+    description: 'Scaffold Payload (Next + admin) : collections, médias, preview. SQLite pour démarrer sans serveur DB.',
+    intent: 'Éditer le contenu hors du code, avec un admin TypeScript natif.',
+    audience: 'Éditeurs, marketing, freelances qui livrent un site + back-office.',
+    promise: 'create-payload-app non interactif, prérequis vérifiés, .env prêt.',
+    vibe: 'Atelier pro : admin clair, front Next, zéro magie opaque.',
+    frameworkId: 'payload',
+    payloadTemplate: 'website',
+    payloadDb: 'sqlite',
+    databaseId: 'none',
+    themes: ['blog', 'vitrine', 'application'],
+    libs: [],
+    commands: [],
+    files: [
+      briefMd({
+        title: 'CMS Payload',
+        intent: 'Contenu éditable dans /admin, front Next synchronisé.',
+        audience: 'Éditeurs et développeurs du même dépôt.',
+        promise: 'Collections typées, médias, rôles — sans CMS SaaS imposé.',
+        vibe: 'Interface admin sobre, front au service du contenu.',
+        sections: [
+          { name: 'Admin /admin', why: 'premier utilisateur à la 1re visite' },
+          { name: 'Collections', why: 'pages, posts, médias' },
+          { name: 'Front', why: 'routes Next branchées sur Payload Local API' },
+          { name: '.env', why: 'PAYLOAD_SECRET + DATABASE_URI déjà posés par PDC' }
+        ]
+      })
+    ]
   }
 ]
 

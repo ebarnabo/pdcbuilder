@@ -229,6 +229,54 @@ export const TOOLS = [
       mac: 'rustup update',
       linux: 'rustup update'
     }
+  },
+  {
+    id: 'mongodb',
+    name: 'MongoDB',
+    group: 'data',
+    tag: 'Base · documents',
+    blurb: 'Serveur MongoDB local. Requis pour les projets Payload en mode mongodb.',
+    detect: 'mongod',
+    detectAny: ['mongod', 'mongosh'],
+    install: {
+      win: wingetInstall('MongoDB.Server'),
+      mac: 'brew tap mongodb/brew && brew install mongodb-community',
+      linux: null
+    },
+    uninstall: {
+      win: wingetUninstall('MongoDB.Server'),
+      mac: 'brew uninstall mongodb-community',
+      linux: null
+    },
+    update: {
+      win: wingetUpgrade('MongoDB.Server'),
+      mac: 'brew upgrade mongodb-community',
+      linux: null
+    }
+  },
+  {
+    id: 'postgres',
+    name: 'PostgreSQL',
+    group: 'data',
+    tag: 'Base · SQL',
+    blurb: 'PostgreSQL local (client psql). Requis pour Payload en mode postgres.',
+    detect: 'psql',
+    versionFlag: '--version',
+    install: {
+      win: wingetInstall('PostgreSQL.PostgreSQL'),
+      mac: brewInstall('postgresql@16'),
+      linux: 'sudo apt-get install -y postgresql postgresql-contrib'
+    },
+    uninstall: {
+      win: wingetUninstall('PostgreSQL.PostgreSQL'),
+      mac: brewUninstall('postgresql@16'),
+      linux: null
+    },
+    update: {
+      win: wingetUpgrade('PostgreSQL.PostgreSQL'),
+      mac: brewUpgrade('postgresql@16'),
+      linux: null
+    }
   }
 ]
 
@@ -346,10 +394,16 @@ function pythonToolMeta(target, installedRow) {
 }
 
 async function toolStatus(tool) {
-  const installed = await hasCommand(tool.detect)
-  const version = installed
-    ? await readVersion(tool.detect, tool.versionFlag || '--version')
-    : null
+  const bins = tool.detectAny || (tool.detect ? [tool.detect] : [])
+  let installed = false
+  let version = null
+  for (const bin of bins) {
+    if (await hasCommand(bin)) {
+      installed = true
+      version = await readVersion(bin, tool.versionFlag || '--version')
+      if (version) break
+    }
+  }
   return {
     id: tool.id,
     name: tool.name,
@@ -419,6 +473,7 @@ export async function status() {
       { id: 'python-sdk', label: 'SDK Python', hint: 'Plusieurs versions peuvent coexister. Sur Windows, le lanceur py choisit la version.' },
       { id: 'python', label: 'Outils Python', hint: 'Utilitaires autour de Python (paquets, lint).' },
       { id: 'runtime', label: 'Runtimes', hint: 'Environnements pour JS, Go, Rust…' },
+      { id: 'data', label: 'Bases de données', hint: 'Serveurs locaux pour CMS (Payload) et backends SQL / documents.' },
       { id: 'vcs', label: 'Git & GitHub', hint: 'Outils déjà utilisés par l’atelier pour les dépôts.' }
     ]
   }

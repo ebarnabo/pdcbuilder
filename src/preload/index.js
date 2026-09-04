@@ -107,6 +107,10 @@ const api = {
     uninstall: invoke('toolchain:uninstall'),
     update: invoke('toolchain:update')
   },
+  payload: {
+    prereqs: invoke('payload:prereqs'),
+    options: invoke('payload:options')
+  },
   preferences: {
     path: invoke('preferences:path'),
     open: invoke('preferences:open')

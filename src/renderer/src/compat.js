@@ -8,7 +8,8 @@ const FAMILY_BY_ID = {
   'vite-svelte': 'svelte',
   sveltekit: 'svelte',
   'vite-vanilla': 'vanilla',
-  astro: 'astro'
+  astro: 'astro',
+  payload: 'react'
 }
 
 /** Catégories surtout React : on exige une preuve de compatibilité, pas « any » par défaut. */
@@ -74,6 +75,7 @@ const COMPAT_LABELS = {
   svelte: 'Svelte',
   next: 'Next.js',
   nuxt: 'Nuxt',
+  payload: 'Payload',
   vanilla: 'Vanilla',
   astro: 'Astro'
 }

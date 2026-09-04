@@ -16,6 +16,7 @@ import { ChecklistModal } from './ProjectChecklist.jsx'
 import { StagesModal } from './ProjectStages.jsx'
 import ProjectDetail from './ProjectDetail.jsx'
 import ProjectPreview from './ProjectPreview.jsx'
+import PayloadSetup from './PayloadSetup.jsx'
 import { api } from './bridge.js'
 
 export default function Projects({
@@ -307,6 +308,7 @@ export default function Projects({
       {creating && (
         <NewProject
           state={state}
+          toast={toast}
           onClose={() => setCreating(false)}
           onDone={async (payload) => {
             setCreating(false)
@@ -672,7 +674,7 @@ function ProjectMenu({ project: p, anchor, editor, onClose, onDuplicate, onDelet
 
 /* ─────────────────────  création de projet  ───────────────────── */
 
-function NewProject({ state, onClose, onDone }) {
+function NewProject({ state, onClose, onDone, toast }) {
   const saved = state.git || {}
   const [name, setName] = useState('')
   const [frameworkId, setFrameworkId] = useState(state.frameworks[0]?.id || '')
@@ -685,6 +687,9 @@ function NewProject({ state, onClose, onDone }) {
   const [workspace, setWorkspace] = useState(state.workspace)
   const [gitStatus, setGitStatus] = useState(null)
   const [themes, setThemes] = useState([])
+  const [payloadTemplate, setPayloadTemplate] = useState('blank')
+  const [payloadDb, setPayloadDb] = useState('sqlite')
+  const [payloadPrereqsOk, setPayloadPrereqsOk] = useState(true)
   const [git, setGit] = useState({
     create: saved.autoCreate !== false,
     provider: saved.provider || 'github',
@@ -701,6 +706,7 @@ function NewProject({ state, onClose, onDone }) {
   }, [databaseId])
 
   const fw = state.frameworks.find((f) => f.id === frameworkId)
+  const isPayload = fw?.id === 'payload' || fw?.kind === 'cms'
   const compatible = useMemo(() => librariesFor(state.libraries, fw), [state.libraries, fw])
   const visibleLibs = useMemo(() => filterLibraryItems(compatible, libQuery), [compatible, libQuery])
   const catalogCount = useMemo(() => countCatalogLibraries(state.libraries), [state.libraries])
@@ -714,6 +720,10 @@ function NewProject({ state, onClose, onDone }) {
     setLibs((l) => keepCompatible(l, state.libraries, fw))
   }, [frameworkId, state.libraries])
 
+  useEffect(() => {
+    if (!isPayload) setPayloadPrereqsOk(true)
+  }, [isPayload])
+
   const applyBlueprint = (id) => {
     setBlueprintId(id)
     if (!id) return
@@ -724,9 +734,12 @@ function NewProject({ state, onClose, onDone }) {
     setLibs(keepCompatible(bp.libs || [], state.libraries, nextFw))
     if (bp.databaseId) setDatabaseId(bp.databaseId)
     setThemes(bp.themes || [])
+    if (bp.payloadTemplate) setPayloadTemplate(bp.payloadTemplate)
+    if (bp.payloadDb) setPayloadDb(bp.payloadDb)
   }
 
   const selectedBp = state.blueprints.find((b) => b.id === blueprintId)
+  const canCreate = Boolean(slug && frameworkId && (!isPayload || payloadPrereqsOk))
 
   return (
     <Modal
@@ -740,16 +753,20 @@ function NewProject({ state, onClose, onDone }) {
             {selectedBp && <span className="chip accent">{selectedBp.name}</span>}
             {themes.map((id) => <span className="chip" key={id}>{themeLabel(id)}</span>)}
             {fw && <span className="chip">{fw.name}</span>}
+            {isPayload && <span className="chip">{payloadTemplate} · {payloadDb}</span>}
             {libs.length > 0 && <span className="chip"><Package size={11} /> {libs.length}</span>}
+            {isPayload && !payloadPrereqsOk && <span className="chip err">Prérequis manquants</span>}
           </div>
           <button className="btn ghost" onClick={onClose}>Annuler</button>
-          <button className="btn primary" disabled={!slug || !frameworkId}
+          <button className="btn primary" disabled={!canCreate}
             onClick={() => onDone({
               name: name.trim(),
               frameworkId,
               libs,
-              databaseId,
-              provision,
+              databaseId: isPayload ? 'none' : databaseId,
+              provision: isPayload ? false : provision,
+              payloadTemplate: isPayload ? payloadTemplate : undefined,
+              payloadDb: isPayload ? payloadDb : undefined,
               blueprintId: blueprintId || null,
               workspace,
               themes,
@@ -832,8 +849,21 @@ function NewProject({ state, onClose, onDone }) {
           </div>
           <ScoreNotes scores={fw?.scores} />
         </Field>
-        <DatabasePicker value={databaseId} onChange={setDatabaseId} />
-        <ProvisionToggle databaseId={databaseId} ready={cloudReady} value={provision} onChange={setProvision} />
+        {isPayload ? (
+          <PayloadSetup
+            template={payloadTemplate}
+            onTemplate={setPayloadTemplate}
+            db={payloadDb}
+            onDb={setPayloadDb}
+            toast={toast}
+            onReadyChange={setPayloadPrereqsOk}
+          />
+        ) : (
+          <>
+            <DatabasePicker value={databaseId} onChange={setDatabaseId} />
+            <ProvisionToggle databaseId={databaseId} ready={cloudReady} value={provision} onChange={setProvision} />
+          </>
+        )}
       </section>
 
       <section className="form-section form-section-libraries">

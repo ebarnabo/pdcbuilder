@@ -133,6 +133,12 @@ export default function ProjectDetail({
             {(p.themes || []).map((id) => (
               <span className="chip" key={id}><Tag size={11} /> {themeLabel(id)}</span>
             ))}
+            {p.payloadTemplate && (
+              <span className="chip">Payload · {p.payloadTemplate}</span>
+            )}
+            {p.payloadDb && (
+              <span className="chip"><Database size={11} /> {p.payloadDb}</span>
+            )}
             {p.databaseId && p.databaseId !== 'none' && (
               <span className="chip"><Database size={11} /> {p.databaseId}</span>
             )}

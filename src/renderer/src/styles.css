@@ -2640,3 +2640,85 @@ html[data-ui="cap"] .btn.primary {
   .shell.onboard-behind .rail,
   .shell.onboard-behind .main { filter: none; opacity: 0.55; }
 }
+
+/* -- Payload CMS setup (création projet) -- */
+.payload-setup {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 8px;
+}
+.payload-prereqs {
+  border-radius: 12px;
+  padding: 14px 14px 10px;
+  background: var(--p2);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.payload-prereqs.ok { box-shadow: inset 0 0 0 1px var(--accent-edge); background: var(--accent-soft); }
+.payload-prereqs.warn { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--danger, #c44) 45%, var(--line)); }
+.payload-prereqs-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.payload-prereqs-head h5 {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+.payload-prereqs-head p {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.payload-prereqs-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.payload-prereq-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.payload-prereq-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 10px;
+  border-radius: 10px;
+  background: var(--p1, var(--bg));
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.payload-prereq-list li.on { box-shadow: inset 0 0 0 1px var(--accent-edge); }
+.payload-prereq-ico {
+  flex: none;
+  margin-top: 2px;
+  color: var(--text-3);
+}
+.payload-prereq-list li.on .payload-prereq-ico { color: var(--accent); }
+.payload-prereq-list li.off .payload-prereq-ico { color: var(--danger, #c44); }
+.payload-prereq-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.payload-prereq-body strong {
+  font-size: 13.5px;
+  font-weight: 620;
+  letter-spacing: -0.015em;
+}
+.payload-prereq-body span {
+  font-size: 12px;
+  color: var(--text-2);
+}
+.payload-prereq-body em {
+  font-style: normal;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
