@@ -1504,19 +1504,191 @@ button.push-heat-cell:focus-visible {
 
 .toast {
   position: fixed; bottom: 26px; left: 50%; z-index: var(--z-toast);
-  background: rgba(46, 39, 34, 0.92); backdrop-filter: saturate(180%) blur(24px);
-  color: var(--text); padding: 11px 20px; border-radius: var(--r-pill);
-  box-shadow: 0 0 0 1px var(--line-2), var(--shadow-3);
-  font-size: 13.5px; font-weight: 550; display: flex; align-items: center; gap: 9px;
-  animation: toast-in 0.44s var(--spring) both;
+  transform: translateX(-50%);
+  display: flex; flex-direction: column; gap: 8px;
+  width: min(420px, calc(100vw - 32px));
+  pointer-events: none;
 }
-@keyframes toast-in {
-  from { opacity: 0; transform: translate(-50%, 20px) scale(0.94); }
-  to { transform: translate(-50%, 0) scale(1); }
+.toast-item {
+  pointer-events: auto;
+  display: grid; grid-template-columns: auto 1fr; align-items: start; gap: 10px 12px;
+  padding: 12px 14px; border-radius: 14px;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  backdrop-filter: saturate(180%) blur(22px);
+  box-shadow:
+    0 1px 0 var(--top-light) inset,
+    0 0 0 1px var(--line-2),
+    0 22px 48px -28px rgba(0, 0, 0, 0.75);
+  color: var(--text);
+  animation: toast-rise 0.48s var(--spring) both;
 }
-.toast::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--ok); flex: none; }
-.toast.err { color: var(--err); }
-.toast.err::before { background: var(--err); }
+.toast-item.out { animation: toast-fall 0.28s var(--ease) both; }
+.toast-item.err { box-shadow: 0 1px 0 var(--top-light) inset, 0 0 0 1px color-mix(in srgb, var(--err) 45%, var(--line)), 0 22px 48px -28px rgba(0, 0, 0, 0.75); }
+.toast-mark { margin-top: 1px; }
+.toast-mark .mark { width: 28px; height: 28px; border-radius: 8px; }
+.toast-mark .mark img { border-radius: 8px; }
+.toast-body { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.toast-kicker {
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--accent);
+}
+.toast-item.err .toast-kicker { color: var(--err); }
+.toast-msg { font-size: 13.5px; font-weight: 550; line-height: 1.35; }
+.toast-bar {
+  grid-column: 1 / -1; height: 2px; border-radius: 999px; overflow: hidden;
+  background: color-mix(in srgb, var(--line) 80%, transparent); margin-top: 2px;
+}
+.toast-bar > i {
+  display: block; height: 100%; width: 100%; transform-origin: left center;
+  background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 40%, #fff));
+  animation: toast-ttl 3.2s linear both;
+}
+.toast-item.err .toast-bar > i { background: var(--err); animation-duration: 4s; }
+@keyframes toast-rise {
+  from { opacity: 0; transform: translateY(18px) scale(0.94); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes toast-fall {
+  to { opacity: 0; transform: translateY(10px) scale(0.96); }
+}
+@keyframes toast-ttl {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
+.proj-gantt-empty {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin: 2px 0 4px; padding: 8px 10px; border-radius: var(--r-md);
+  border: 0; background: transparent; box-shadow: inset 0 0 0 1px var(--line);
+  color: var(--text-3); font: inherit; font-size: 12.5px; cursor: pointer;
+  transition: color 0.15s var(--ease), box-shadow 0.15s var(--ease);
+}
+.proj-gantt-empty:hover { color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent-strong); }
+.proj-gantt-snip {
+  display: block; width: 100%; text-align: left; margin: 4px 0 2px;
+  padding: 10px 11px; border-radius: var(--r-md); border: 0; cursor: pointer;
+  background: var(--well); box-shadow: inset 0 0 0 1px var(--line);
+  color: inherit; font: inherit;
+  transition: box-shadow 0.15s var(--ease);
+}
+.proj-gantt-snip:hover { box-shadow: inset 0 0 0 1px var(--accent-strong); }
+.proj-gantt-snip-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  margin-bottom: 8px; font-size: 11.5px; font-weight: 650; color: var(--text-2);
+  letter-spacing: 0.02em; text-transform: uppercase;
+}
+.proj-gantt-snip-head span { display: inline-flex; align-items: center; gap: 6px; }
+.proj-gantt-snip-head em {
+  font-style: normal; font-weight: 600; color: var(--accent);
+  letter-spacing: 0; text-transform: none;
+}
+.proj-gantt-snip-head .linkish {
+  border: 0; background: none; color: var(--accent); font: inherit;
+  font-size: 11.5px; font-weight: 600; text-transform: none; letter-spacing: 0;
+}
+.proj-gantt-snip-track {
+  position: relative; height: 18px; border-radius: 6px;
+  background: color-mix(in srgb, var(--line) 55%, transparent);
+  overflow: hidden;
+}
+.proj-gantt-snip-bar {
+  position: absolute; top: 4px; height: 10px; border-radius: 4px;
+  background: var(--accent);
+  opacity: 0.85;
+}
+.proj-gantt-snip-bar.status-planned { background: color-mix(in srgb, var(--text-3) 70%, var(--accent)); }
+.proj-gantt-snip-bar.status-active { background: var(--accent); }
+.proj-gantt-snip-bar.status-done { background: var(--ok, #6bcf8e); }
+.proj-gantt-snip-today {
+  position: absolute; top: 0; bottom: 0; width: 1.5px;
+  background: color-mix(in srgb, var(--err) 70%, #fff); opacity: 0.9;
+}
+
+.gantt-wrap { display: flex; flex-direction: column; gap: 12px; }
+.gantt-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.gantt-layout {
+  display: grid; gap: 14px;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 280px);
+}
+@media (max-width: 900px) {
+  .gantt-layout { grid-template-columns: 1fr; }
+}
+.gantt {
+  border-radius: var(--r-md); overflow: hidden;
+  background: var(--well); box-shadow: inset 0 0 0 1px var(--line);
+}
+.gantt-head, .gantt-row {
+  display: grid; grid-template-columns: minmax(140px, 200px) minmax(0, 1fr);
+}
+.gantt-head {
+  padding: 8px 10px; border-bottom: 1px solid var(--line);
+  font-size: 11px; font-weight: 650; color: var(--text-3);
+  letter-spacing: 0.04em; text-transform: uppercase;
+}
+.gantt-time-col { position: relative; min-width: 0; }
+.gantt-months { position: relative; height: 16px; }
+.gantt-months span {
+  position: absolute; top: 0; transform: translateX(-50%);
+  font-size: 10.5px; color: var(--text-3); white-space: nowrap;
+}
+.gantt-range-hint {
+  margin-top: 2px; font-size: 11px; font-weight: 500; text-transform: none; letter-spacing: 0;
+  color: var(--text-3);
+}
+.gantt-body { display: flex; flex-direction: column; }
+.gantt-row {
+  padding: 8px 10px; gap: 8px; align-items: center;
+  border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  cursor: pointer; text-align: left; background: transparent; border-left: 0; border-right: 0; border-bottom: 0;
+  color: inherit; font: inherit;
+  animation: card-in 0.4s var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 35ms);
+}
+.gantt-row:hover, .gantt-row.on { background: color-mix(in srgb, var(--accent-soft) 70%, transparent); }
+.gantt-label-col {
+  display: flex; flex-direction: column; gap: 4px; min-width: 0;
+}
+.gantt-label-col strong {
+  font-size: 13px; font-weight: 650; letter-spacing: -0.015em;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.chip.status-planned { color: var(--text-2); }
+.chip.status-active { color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent-edge); }
+.chip.status-done { color: var(--ok, #6bcf8e); }
+.gantt-track {
+  position: relative; height: 28px; border-radius: 8px;
+  background: color-mix(in srgb, var(--line) 40%, transparent);
+}
+.gantt-today {
+  position: absolute; top: 0; bottom: 0; width: 1.5px; z-index: 2;
+  background: color-mix(in srgb, var(--err) 75%, #fff);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--err) 20%, transparent);
+}
+.gantt-bar {
+  position: absolute; top: 5px; height: 18px; z-index: 1;
+  border: 0; border-radius: 7px; padding: 0 8px;
+  display: flex; align-items: center; overflow: hidden;
+  cursor: pointer; color: #fff; font: inherit; font-size: 11px; font-weight: 650;
+  background: linear-gradient(110deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #0af));
+  box-shadow: 0 6px 16px -10px color-mix(in srgb, var(--accent) 80%, transparent);
+  transition: filter 0.15s var(--ease), transform 0.15s var(--ease);
+}
+.gantt-bar span {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.gantt-bar.status-planned {
+  background: linear-gradient(110deg, color-mix(in srgb, var(--text-3) 55%, var(--accent)), var(--text-3));
+  opacity: 0.9;
+}
+.gantt-bar.status-done {
+  background: linear-gradient(110deg, color-mix(in srgb, var(--ok, #6bcf8e) 80%, #0a0), var(--ok, #6bcf8e));
+}
+.gantt-bar.on, .gantt-bar:hover { filter: brightness(1.08); transform: translateY(-1px); }
+.gantt-editor {
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 12px 14px; border-radius: var(--r-md);
+  background: var(--panel); box-shadow: inset 0 0 0 1px var(--line);
+}
 
 .kbd {
   font-family: 'JetBrains Mono', monospace; font-size: 10.5px; padding: 2px 6px;

@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import {
   Play, Square, Hammer, FolderOpen, Copy, Trash2, Globe, Plus, Package,
   Code2, Layers, MoreHorizontal, FolderInput, Bookmark, Boxes, ExternalLink,
-  Github, CheckSquare, CloudUpload, CloudDownload, Link2, Database, Tag, Search, RefreshCw
+  Github, CheckSquare, CloudUpload, CloudDownload, Link2, Database, Tag, Search, RefreshCw, GanttChart
 } from 'lucide-react'
 import { Modal, Menu, Field, SearchBox, LibraryPicker, Empty, bytes, ago, shortPath, Segmented, ScoreNotes, Confirm } from './ui.jsx'
 import { GitFields, RepoChip, CloneModal } from './GitFields.jsx'
@@ -13,6 +13,7 @@ import { THEMES, ThemePicker, themeLabel, toggleTheme } from './themes.jsx'
 import { categoryLabel, isExperience } from './experienceMeta.js'
 import PushBoard from './PushBoard.jsx'
 import { ChecklistSnippet, ChecklistModal, checklistStats } from './ProjectChecklist.jsx'
+import { StagesSnippet, StagesModal, stagesStats } from './ProjectStages.jsx'
 import ProjectDetail from './ProjectDetail.jsx'
 import { api } from './bridge.js'
 
@@ -31,6 +32,7 @@ export default function Projects({ state, refresh, toast, focusProject }) {
   const [themeFilter, setThemeFilter] = useState([])
   const [themesFor, setThemesFor] = useState(null)
   const [ideasFor, setIdeasFor] = useState(null)
+  const [stagesFor, setStagesFor] = useState(null)
   const [detailId, setDetailId] = useState(null)
   const [busySync, setBusySync] = useState(false)
   const [busyScan, setBusyScan] = useState(false)
@@ -134,6 +136,14 @@ export default function Projects({ state, refresh, toast, focusProject }) {
           <ChecklistModal
             project={state.projects.find((p) => p.id === ideasFor.id) || ideasFor}
             onClose={() => setIdeasFor(null)}
+            act={act}
+          />
+        )}
+
+        {stagesFor && (
+          <StagesModal
+            project={state.projects.find((p) => p.id === stagesFor.id) || stagesFor}
+            onClose={() => setStagesFor(null)}
             act={act}
           />
         )}
@@ -258,6 +268,7 @@ export default function Projects({ state, refresh, toast, focusProject }) {
               onTheme={(id) => setThemeFilter((cur) => toggleTheme(cur, id))}
               onPush={() => setRepo(p)}
               onIdeas={() => setIdeasFor(p)}
+              onStages={() => setStagesFor(p)}
               act={act}
               focusProject={focusProject}
               toast={toast}
@@ -279,6 +290,7 @@ export default function Projects({ state, refresh, toast, focusProject }) {
           onDatabase={setDb}
           onThemes={setThemesFor}
           onIdeas={setIdeasFor}
+          onStages={setStagesFor}
           onOpen={(p) => setDetailId(p.id)}
           act={act}
         />
@@ -288,6 +300,14 @@ export default function Projects({ state, refresh, toast, focusProject }) {
         <ChecklistModal
           project={state.projects.find((p) => p.id === ideasFor.id) || ideasFor}
           onClose={() => setIdeasFor(null)}
+          act={act}
+        />
+      )}
+
+      {stagesFor && (
+        <StagesModal
+          project={state.projects.find((p) => p.id === stagesFor.id) || stagesFor}
+          onClose={() => setStagesFor(null)}
           act={act}
         />
       )}
@@ -415,13 +435,14 @@ export default function Projects({ state, refresh, toast, focusProject }) {
 
 /* ─────────────────────────  carte projet  ───────────────────────── */
 
-function ProjectCard({ project: p, framework: fw, build, index, onOpen, onMenu, onTheme, onPush, onIdeas, act, focusProject, toast }) {
+function ProjectCard({ project: p, framework: fw, build, index, onOpen, onMenu, onTheme, onPush, onIdeas, onStages, act, focusProject, toast }) {
   const btnRef = useRef(null)
   const remote = Boolean(p.remoteOnly)
   const busy = p.status === 'scaffolding' || p.status === 'cloning'
   const live = !remote && (p.status === 'running' || p.status === 'starting')
   const needsPush = !remote && !p.repo?.url
   const ideas = checklistStats(p.checklist)
+  const stages = stagesStats(p.stages)
 
   const statusLabel = remote ? 'Sur GitHub · pas encore local'
     : p.status === 'cloning' ? 'Clonage du dépôt'
@@ -488,6 +509,11 @@ function ProjectCard({ project: p, framework: fw, build, index, onOpen, onMenu, 
             <CheckSquare size={11} /> {ideas.done}/{ideas.total} idées
           </button>
         )}
+        {stages.total > 0 && (
+          <button type="button" className="chip link accent" onClick={onStages}>
+            <GanttChart size={11} /> {stages.done}/{stages.total} étapes
+          </button>
+        )}
       </div>
 
       <div className="status" onClick={stop}>
@@ -504,6 +530,7 @@ function ProjectCard({ project: p, framework: fw, build, index, onOpen, onMenu, 
       {!remote && (
         <div onClick={stop}>
           <ChecklistSnippet project={p} onOpen={onIdeas} act={act} />
+          <StagesSnippet project={p} onOpen={onStages} />
         </div>
       )}
 
@@ -576,7 +603,7 @@ function ProjectCard({ project: p, framework: fw, build, index, onOpen, onMenu, 
   )
 }
 
-function ProjectMenu({ project: p, anchor, editor, onClose, onDuplicate, onDelete, onAddLibs, onRepo, onDatabase, onThemes, onIdeas, onOpen, act }) {
+function ProjectMenu({ project: p, anchor, editor, onClose, onDuplicate, onDelete, onAddLibs, onRepo, onDatabase, onThemes, onIdeas, onStages, onOpen, act }) {
   if (!p) return null
   const run = (fn) => { onClose(); fn() }
   const remote = Boolean(p.remoteOnly)
@@ -623,6 +650,7 @@ function ProjectMenu({ project: p, anchor, editor, onClose, onDuplicate, onDelet
       <button onClick={() => run(() => onDatabase(p))}><Database size={15} /> Configurer la base</button>
       <button onClick={() => run(() => onThemes(p))}><Tag size={15} /> Thèmes</button>
       <button onClick={() => run(() => onIdeas(p))}><CheckSquare size={15} /> Idées</button>
+      <button onClick={() => run(() => onStages?.(p))}><GanttChart size={15} /> Planning Gantt</button>
       <button onClick={() => run(() => onDuplicate(p))}><Copy size={15} /> Dupliquer</button>
       <button onClick={() => run(() => act(() => api.blueprint.fromProject({ id: p.id, name: `Base ${p.name}` }), 'Blueprint créé'))}>
         <Bookmark size={15} /> En faire un blueprint

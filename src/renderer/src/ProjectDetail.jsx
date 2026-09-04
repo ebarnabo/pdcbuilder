@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react'
 import {
   ArrowLeft, Play, Square, Hammer, Package, Plus, Github, CloudDownload, CloudUpload,
-  Globe, ExternalLink, FolderOpen, Code2, Database, CheckSquare, Tag
+  Globe, ExternalLink, FolderOpen, Code2, Database, CheckSquare, Tag, GanttChart
 } from 'lucide-react'
 import { LibraryPicker, bytes, ago, shortPath, Empty } from './ui.jsx'
 import { RepoChip } from './GitFields.jsx'
 import { librariesFor, filterLibraryItems, countCatalogLibraries } from './compat.js'
 import { themeLabel } from './themes.jsx'
 import { ChecklistSnippet, checklistStats } from './ProjectChecklist.jsx'
+import { StagesPanel, stagesStats } from './ProjectStages.jsx'
 import { api } from './bridge.js'
 
 function catalogIndex(libraries) {
@@ -60,6 +61,7 @@ export default function ProjectDetail({
   const busy = p.status === 'scaffolding' || p.status === 'cloning'
   const live = !remote && (p.status === 'running' || p.status === 'starting')
   const ideas = checklistStats(p.checklist)
+  const stages = stagesStats(p.stages)
   const catalogCount = countCatalogLibraries(state.libraries)
 
   const grouped = useMemo(() => {
@@ -133,6 +135,11 @@ export default function ProjectDetail({
                 <CheckSquare size={11} /> {ideas.done}/{ideas.total} idées
               </button>
             )}
+            {stages.total > 0 && (
+              <span className="chip accent">
+                <GanttChart size={11} /> {stages.done}/{stages.total} étapes
+              </span>
+            )}
           </div>
         </div>
 
@@ -192,6 +199,22 @@ export default function ProjectDetail({
         <div className="proj-detail-ideas">
           <ChecklistSnippet project={p} onOpen={onIdeas} act={act} />
         </div>
+      )}
+
+      {!remote && (
+        <section className="proj-detail-section">
+          <div className="proj-detail-section-head">
+            <div>
+              <h4>Planning</h4>
+              <p>
+                {stages.total
+                  ? `${stages.total} étape${stages.total > 1 ? 's' : ''} · vue Gantt`
+                  : 'Découpe le projet en phases datées'}
+              </p>
+            </div>
+          </div>
+          <StagesPanel project={p} act={act} />
+        </section>
       )}
 
       <section className="proj-detail-section">

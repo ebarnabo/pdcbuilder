@@ -431,6 +431,7 @@ ipcMain.handle('project:create', async (_e, payload) => {
     themes: Array.isArray(payload.themes) ? payload.themes : (bp?.themes || []),
     notes: payload.notes || '',
     checklist: [],
+    stages: [],
     createdAt: Date.now(),
     status: 'scaffolding',
     repo: null
@@ -780,6 +781,48 @@ ipcMain.handle('project:update', (_e, { id, fields }) => {
         }))
         .filter((item) => item.text)
         .slice(0, 80)
+      : []
+  }
+  if ('stages' in safe) {
+    const day = (v) => {
+      if (typeof v === 'number' && Number.isFinite(v)) {
+        const d = new Date(v)
+        return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())
+      }
+      const s = String(v || '').slice(0, 10)
+      const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+      if (!m) return null
+      return Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+    }
+    const statuses = new Set(['planned', 'active', 'done'])
+    safe.stages = Array.isArray(safe.stages)
+      ? safe.stages
+        .map((item, i) => {
+          let start = day(item?.start)
+          let end = day(item?.end)
+          const today = (() => {
+            const n = new Date()
+            return Date.UTC(n.getFullYear(), n.getMonth(), n.getDate())
+          })()
+          if (start == null && end == null) {
+            start = today + i * 7 * 86400000
+            end = start + 6 * 86400000
+          } else if (start == null) start = end
+          else if (end == null) end = start
+          if (end < start) [start, end] = [end, start]
+          const title = String(item?.title || item?.name || '').trim().slice(0, 80)
+          if (!title) return null
+          return {
+            id: String(item?.id || uid()),
+            title,
+            start,
+            end,
+            status: statuses.has(item?.status) ? item.status : 'planned',
+            notes: String(item?.notes || '').trim().slice(0, 240)
+          }
+        })
+        .filter(Boolean)
+        .slice(0, 40)
       : []
   }
   store.patch({ projects: s.projects.map((p) => (p.id === id ? { ...p, ...safe } : p)) })

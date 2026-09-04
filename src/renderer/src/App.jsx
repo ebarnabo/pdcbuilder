@@ -85,7 +85,7 @@ export default function App() {
   const [consoleH, setConsoleH] = useState(0)      // 0 = replié
   const [chatOpen, setChatOpen] = useState(false)
   const [activeId, setActiveId] = useState(null)
-  const [toast, setToast] = useState(null)
+  const [toasts, setToasts] = useState([])
   const [stuck, setStuck] = useState(false)
   const [dragging, setDragging] = useState(false)
   const [bootError, setBootError] = useState(null)
@@ -209,8 +209,13 @@ export default function App() {
   }
 
   const notify = useCallback((message, isError = false) => {
-    setToast({ message, isError, key: Date.now() })
-    setTimeout(() => setToast((t) => (t?.message === message ? null : t)), 3400)
+    const key = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    setToasts((list) => [...list.slice(-3), { key, message, isError, leaving: false }])
+    const ttl = isError ? 4200 : 3200
+    setTimeout(() => {
+      setToasts((list) => list.map((t) => (t.key === key ? { ...t, leaving: true } : t)))
+      setTimeout(() => setToasts((list) => list.filter((t) => t.key !== key)), 280)
+    }, ttl)
   }, [])
 
   if (bootError) {
@@ -352,7 +357,20 @@ export default function App() {
         {chatOpen && <Chat state={state} refresh={refresh} toast={notify} project={active} onClose={() => setChatOpen(false)} />}
       </main>
 
-      {toast && <div key={toast.key} className={`toast${toast.isError ? ' err' : ''}`}>{toast.message}</div>}
+      {toasts.length > 0 && (
+        <div className="toast" aria-live="polite">
+          {toasts.map((t) => (
+            <div key={t.key} className={`toast-item${t.isError ? ' err' : ''}${t.leaving ? ' out' : ''}`}>
+              <div className="toast-mark"><BrandMark size="sm" /></div>
+              <div className="toast-body">
+                <span className="toast-kicker">{t.isError ? 'Attention' : 'PDC Builder'}</span>
+                <span className="toast-msg">{t.message}</span>
+              </div>
+              <div className="toast-bar" aria-hidden><i /></div>
+            </div>
+          ))}
+        </div>
+      )}
       {boot !== 'ready' && <BootVeil fading={boot === 'reveal'} />}
       {showOnboarding && (
         <Onboarding state={state} onComplete={refresh} />
