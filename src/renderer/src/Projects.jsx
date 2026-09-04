@@ -13,6 +13,7 @@ import { THEMES, ThemePicker, themeLabel, toggleTheme } from './themes.jsx'
 import { categoryLabel, isExperience } from './experienceMeta.js'
 import PushBoard from './PushBoard.jsx'
 import { ChecklistSnippet, ChecklistModal, checklistStats } from './ProjectChecklist.jsx'
+import ProjectDetail from './ProjectDetail.jsx'
 import { api } from './bridge.js'
 
 export default function Projects({ state, refresh, toast, focusProject }) {
@@ -30,6 +31,7 @@ export default function Projects({ state, refresh, toast, focusProject }) {
   const [themeFilter, setThemeFilter] = useState([])
   const [themesFor, setThemesFor] = useState(null)
   const [ideasFor, setIdeasFor] = useState(null)
+  const [detailId, setDetailId] = useState(null)
   const [busySync, setBusySync] = useState(false)
   const [busyScan, setBusyScan] = useState(false)
 
@@ -57,6 +59,10 @@ export default function Projects({ state, refresh, toast, focusProject }) {
     local: state.projects.filter(isLocal).length,
     github: state.projects.filter(isGithub).length
   }), [state.projects])
+
+  useEffect(() => {
+    if (detailId && !state.projects.some((p) => p.id === detailId)) setDetailId(null)
+  }, [detailId, state.projects])
 
   const buildKey = state.projects.map((p) => `${p.id}:${p.lastBuild}`).join()
   useEffect(() => {
@@ -101,6 +107,63 @@ export default function Projects({ state, refresh, toast, focusProject }) {
     } finally {
       setBusyScan(false)
     }
+  }
+
+  const detail = detailId ? state.projects.find((p) => p.id === detailId) : null
+
+  if (detail) {
+    return (
+      <>
+        <ProjectDetail
+          project={detail}
+          state={state}
+          build={builds[detail.id]}
+          onBack={() => setDetailId(null)}
+          act={act}
+          focusProject={focusProject}
+          toast={toast}
+          onPush={() => setRepo(detail)}
+          onIdeas={() => setIdeasFor(detail)}
+          onThemes={() => setThemesFor(detail)}
+          onDatabase={() => setDb(detail)}
+          onRepo={() => setRepo(detail)}
+          refresh={refresh}
+        />
+
+        {ideasFor && (
+          <ChecklistModal
+            project={state.projects.find((p) => p.id === ideasFor.id) || ideasFor}
+            onClose={() => setIdeasFor(null)}
+            act={act}
+          />
+        )}
+
+        {themesFor && (
+          <ThemesModal
+            project={state.projects.find((p) => p.id === themesFor.id) || themesFor}
+            onClose={() => setThemesFor(null)}
+            act={act}
+          />
+        )}
+
+        {db && (
+          <DatabaseModal
+            project={state.projects.find((p) => p.id === db.id) || db}
+            onClose={() => setDb(null)}
+            act={act}
+          />
+        )}
+
+        {repo && (
+          <RepoModal
+            project={state.projects.find((p) => p.id === repo.id) || repo}
+            state={state}
+            onClose={() => setRepo(null)}
+            act={act}
+          />
+        )}
+      </>
+    )
   }
 
   return (
@@ -190,6 +253,7 @@ export default function Projects({ state, refresh, toast, focusProject }) {
               project={p}
               framework={fwById[p.frameworkId]}
               build={builds[p.id]}
+              onOpen={() => setDetailId(p.id)}
               onMenu={(el) => setMenu(menu?.id === p.id ? null : { id: p.id, el })}
               onTheme={(id) => setThemeFilter((cur) => toggleTheme(cur, id))}
               onPush={() => setRepo(p)}
@@ -215,6 +279,7 @@ export default function Projects({ state, refresh, toast, focusProject }) {
           onDatabase={setDb}
           onThemes={setThemesFor}
           onIdeas={setIdeasFor}
+          onOpen={(p) => setDetailId(p.id)}
           act={act}
         />
       )}
@@ -350,7 +415,7 @@ export default function Projects({ state, refresh, toast, focusProject }) {
 
 /* ─────────────────────────  carte projet  ───────────────────────── */
 
-function ProjectCard({ project: p, framework: fw, build, index, onMenu, onTheme, onPush, onIdeas, act, focusProject, toast }) {
+function ProjectCard({ project: p, framework: fw, build, index, onOpen, onMenu, onTheme, onPush, onIdeas, act, focusProject, toast }) {
   const btnRef = useRef(null)
   const remote = Boolean(p.remoteOnly)
   const busy = p.status === 'scaffolding' || p.status === 'cloning'
@@ -373,8 +438,18 @@ function ProjectCard({ project: p, framework: fw, build, index, onMenu, onTheme,
     if (r?.ok && !r.error) toast(r.alreadyLocal ? 'Déjà présent en local' : 'Dépôt cloné dans l’atelier')
   }
 
+  const stop = (e) => e.stopPropagation()
+
   return (
-    <article className={`card interactive${live ? ' live' : ''}${remote ? ' remote' : ''}`} style={{ '--i': Math.min(index, 8) }}>
+    <article
+      className={`card interactive proj-card${live ? ' live' : ''}${remote ? ' remote' : ''}`}
+      style={{ '--i': Math.min(index, 8) }}
+      onClick={onOpen}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen?.() } }}
+      role="button"
+      tabIndex={0}
+      aria-label={`Ouvrir ${p.name}`}
+    >
       <div className="card-head">
         <div style={{ flex: 1, minWidth: 0 }}>
           <h4 className="card-title">{p.name}</h4>
@@ -382,21 +457,18 @@ function ProjectCard({ project: p, framework: fw, build, index, onMenu, onTheme,
             {remote ? (p.repo?.fullName || p.repo?.url || 'GitHub') : shortPath(p.path, 40)}
           </div>
         </div>
-        {!remote && (
-          <button ref={btnRef} className="btn icon sm ghost" aria-label="Plus d'actions" aria-haspopup="menu"
-            onClick={() => onMenu(btnRef.current)}>
-            <MoreHorizontal size={16} />
-          </button>
-        )}
-        {remote && (
-          <button ref={btnRef} className="btn icon sm ghost" aria-label="Plus d'actions" aria-haspopup="menu"
-            onClick={() => onMenu(btnRef.current)}>
-            <MoreHorizontal size={16} />
-          </button>
-        )}
+        <button
+          ref={btnRef}
+          className="btn icon sm ghost"
+          aria-label="Plus d'actions"
+          aria-haspopup="menu"
+          onClick={(e) => { stop(e); onMenu(btnRef.current) }}
+        >
+          <MoreHorizontal size={16} />
+        </button>
       </div>
 
-      <div className="chip-row">
+      <div className="chip-row" onClick={stop}>
         {remote
           ? <span className="chip"><Github size={11} /> Distant</span>
           : <span className="chip accent">{fw?.name || 'Framework retiré'}</span>}
@@ -418,7 +490,7 @@ function ProjectCard({ project: p, framework: fw, build, index, onMenu, onTheme,
         )}
       </div>
 
-      <div className="status">
+      <div className="status" onClick={stop}>
         <span className={`pulse ${busy ? 'starting' : remote ? 'remote' : p.status === 'error' ? 'error' : p.status || ''}`} />
         <span>{statusLabel}</span>
         {p.status === 'running' && p.url && (
@@ -430,12 +502,14 @@ function ProjectCard({ project: p, framework: fw, build, index, onMenu, onTheme,
       </div>
 
       {!remote && (
-        <ChecklistSnippet project={p} onOpen={onIdeas} act={act} />
+        <div onClick={stop}>
+          <ChecklistSnippet project={p} onOpen={onIdeas} act={act} />
+        </div>
       )}
 
       {busy && <div className="progress"><i /></div>}
 
-      <div className="card-actions">
+      <div className="card-actions" onClick={stop}>
         {remote ? (
           <>
             <button className="btn sm primary" disabled={busy} onClick={fetchRemote}>
@@ -502,7 +576,7 @@ function ProjectCard({ project: p, framework: fw, build, index, onMenu, onTheme,
   )
 }
 
-function ProjectMenu({ project: p, anchor, editor, onClose, onDuplicate, onDelete, onAddLibs, onRepo, onDatabase, onThemes, onIdeas, act }) {
+function ProjectMenu({ project: p, anchor, editor, onClose, onDuplicate, onDelete, onAddLibs, onRepo, onDatabase, onThemes, onIdeas, onOpen, act }) {
   if (!p) return null
   const run = (fn) => { onClose(); fn() }
   const remote = Boolean(p.remoteOnly)
@@ -510,6 +584,7 @@ function ProjectMenu({ project: p, anchor, editor, onClose, onDuplicate, onDelet
   if (remote) {
     return (
       <Menu anchor={anchor} onClose={onClose}>
+        <button onClick={() => run(() => onOpen?.(p))}><Boxes size={15} /> Voir le détail</button>
         {p.repo?.url && (
           <button onClick={() => run(() => api.fs.openUrl(p.repo.url))}><Github size={15} /> Ouvrir sur GitHub</button>
         )}
@@ -524,6 +599,7 @@ function ProjectMenu({ project: p, anchor, editor, onClose, onDuplicate, onDelet
 
   return (
     <Menu anchor={anchor} onClose={onClose}>
+      <button onClick={() => run(() => onOpen?.(p))}><Boxes size={15} /> Voir le détail</button>
       <button onClick={() => run(() => api.editor.open({ path: p.path, editor }))}><Code2 size={15} /> Ouvrir dans l’éditeur</button>
       <button onClick={() => run(() => api.fs.reveal(p.path))}><FolderOpen size={15} /> Révéler le dossier</button>
       <hr />
@@ -537,6 +613,7 @@ function ProjectMenu({ project: p, anchor, editor, onClose, onDuplicate, onDelet
         <button onClick={() => run(() => onRepo(p))}><CloudUpload size={15} /> Pousser sur GitHub</button>
       )}
       <hr />
+      <button onClick={() => run(() => onOpen?.(p))}><Package size={15} /> Librairies du projet</button>
       <button onClick={() => run(() => onAddLibs(p))}><Package size={15} /> Ajouter des librairies</button>
       {(p.status === 'error' || p.status === 'scaffolding') && (
         <button onClick={() => run(() => act(() => api.project.repair(p.id), 'Projet régénéré'))}>
