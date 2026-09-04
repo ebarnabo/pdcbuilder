@@ -133,8 +133,8 @@ export default function App() {
     let unsub = () => {}
     waitForApi().then(() => {
       const offLog = api.on('proc:log', (entry) => {
-        setLogs((l) => [...l.slice(-800), entry])
-        setConsoleH((h) => (h === 0 ? lastH.current : h))
+        setLogs((l) => [...l.slice(-2500), entry])
+        setConsoleH((h) => (h < 160 ? Math.max(lastH.current || 280, 280) : h))
       })
       const offState = api.on('proc:state', refresh)
       const offProject = api.on('project:changed', refresh)
@@ -333,7 +333,10 @@ export default function App() {
           <div className="content-inner">
             {view === 'projects' && (
               <Projects state={state} refresh={refresh} toast={notify}
-                focusProject={(id) => { setActiveId(id); setConsoleH((h) => (h === 0 ? lastH.current : h)) }} />
+                focusProject={(id) => {
+                  setActiveId(id)
+                  setConsoleH((h) => (h < 160 ? Math.max(lastH.current || 280, 280) : h))
+                }} />
             )}
             {view === 'blueprints' && <Blueprints state={state} refresh={refresh} toast={notify} />}
             {view === 'catalog' && <Catalog state={state} refresh={refresh} toast={notify} tab={catalogTab} setTab={setCatalogTab} docsStatus={docsStatus} />}

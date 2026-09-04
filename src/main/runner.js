@@ -8,7 +8,6 @@ const running = new Map()
 const lastLog = new Map()
 
 const ANSI_RE = /\u001b\[[0-?]*[ -/]*[@-~]/g
-
 const URL_RE = /https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?[^\s"'<>]*/i
 
 function send(win, channel, payload) {
@@ -35,13 +34,60 @@ function emitLog(win, projectId, raw, kind = 'out') {
   if (!line) return
   const prev = lastLog.get(projectId)
   const at = Date.now()
-  if (prev && prev.line === line && at - prev.at < 150) return
+  // Anti-spam seulement pour les lignes progress répétées à l’identique
+  if (prev && prev.line === line && at - prev.at < 80) return
   lastLog.set(projectId, { line, at })
   send(win, 'proc:log', { projectId, line, kind, at })
 }
 
 export function log(win, projectId, line, kind = 'out') {
   emitLog(win, projectId, line, kind)
+}
+
+/**
+ * Découpe stdout/stderr en lignes, y compris les progress Vite/npm qui utilisent `\r`.
+ */
+function attachStreams(child, win, projectId, { onChunk } = {}) {
+  const buffers = { out: '', err: '' }
+
+  const push = (kind, chunk) => {
+    const text = chunk.toString()
+    onChunk?.(text, kind)
+    // \r\n | \n | \r seul (barres de progression)
+    let buffer = buffers[kind] + text
+    const parts = buffer.split(/\r?\n|\r/)
+    buffers[kind] = parts.pop() ?? ''
+    for (const part of parts) {
+      if (cleanLine(part)) emitLog(win, projectId, part, kind)
+    }
+  }
+
+  const flush = () => {
+    for (const kind of ['out', 'err']) {
+      if (cleanLine(buffers[kind])) emitLog(win, projectId, buffers[kind], kind)
+      buffers[kind] = ''
+    }
+  }
+
+  if (child.stdout) child.stdout.on('data', (c) => push('out', c))
+  else log(win, projectId, '▸ stdout indisponible', 'meta')
+  if (child.stderr) child.stderr.on('data', (c) => push('err', c))
+  else log(win, projectId, '▸ stderr indisponible', 'meta')
+
+  return { flush }
+}
+
+function spawnEnv(extra = {}) {
+  return {
+    ...process.env,
+    FORCE_COLOR: '0',
+    NO_COLOR: '1',
+    // Ne pas forcer CI=1 : certains outils réduisent alors leur sortie
+    ADBLOCK: '1',
+    GH_PROMPT_DISABLED: '1',
+    GIT_TERMINAL_PROMPT: '0',
+    ...extra
+  }
 }
 
 /**
@@ -55,41 +101,28 @@ export function exec(win, projectId, command, cwd, label = '') {
     const child = spawn(command, {
       cwd,
       shell: true,
-      env: {
-        ...process.env,
-        FORCE_COLOR: '0',
-        NO_COLOR: '1',
-        CI: '1',
-        ADBLOCK: '1',
-        GH_PROMPT_DISABLED: '1',
-        GIT_TERMINAL_PROMPT: '0'
-      },
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: spawnEnv({ CI: '1' }),
       detached: !isWin
     })
 
     let stdout = ''
     let stderr = ''
-    const pipe = (stream, kind) => {
-      let buffer = ''
-      stream.on('data', (chunk) => {
-        const text = chunk.toString()
+    const { flush } = attachStreams(child, win, projectId, {
+      onChunk: (text, kind) => {
         if (kind === 'out') stdout += text
         else stderr += text
-        buffer += text
-        const lines = buffer.split(/\r?\n/)
-        buffer = lines.pop() ?? ''
-        lines.filter((l) => cleanLine(l)).forEach((l) => emitLog(win, projectId, l, kind))
-      })
-      stream.on('end', () => { if (cleanLine(buffer)) emitLog(win, projectId, buffer, kind) })
-    }
-    pipe(child.stdout, 'out')
-    pipe(child.stderr, 'err')
+      }
+    })
 
     child.on('error', (e) => {
+      flush()
       log(win, projectId, e.message, 'err')
       resolve({ ok: false, code: -1, stdout, stderr: e.message })
     })
     child.on('close', (code) => {
+      flush()
       log(win, projectId, code === 0 ? '✓ terminé' : `✕ code ${code}`, code === 0 ? 'ok' : 'err')
       resolve({ ok: code === 0, code, stdout, stderr })
     })
@@ -99,44 +132,48 @@ export function exec(win, projectId, command, cwd, label = '') {
 export function startDev(win, project, command) {
   stopDev(project.id)
   lastLog.delete(project.id)
-  log(win, project.id, `▸ serveur de dev`, 'meta')
+  log(win, project.id, `▸ serveur de dev — ${project.name || project.id}`, 'meta')
+  log(win, project.id, `▸ cwd ${project.path}`, 'meta')
   log(win, project.id, `$ ${command}`, 'cmd')
 
   const child = spawn(command, {
     cwd: project.path,
     shell: true,
-    env: {
-      ...process.env,
-      FORCE_COLOR: '0',
-      NO_COLOR: '1',
-      CI: '1',
-      BROWSER: 'none'
-    },
+    windowsHide: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: spawnEnv({ BROWSER: 'none' }),
     detached: !isWin
   })
 
-  const entry = { child, url: null }
+  const entry = { child, url: null, flush: null }
   running.set(project.id, entry)
 
-  const scan = (chunk, kind) => {
-    const text = chunk.toString()
-    text.split(/\r?\n/).filter((l) => cleanLine(l)).forEach((l) => emitLog(win, project.id, l, kind))
-    if (!entry.url) {
-      const url = extractUrl(text)
-      if (url) {
-        entry.url = url
-        send(win, 'proc:state', { projectId: project.id, status: 'running', url: entry.url })
-        emitLog(win, project.id, `▸ serveur prêt : ${url}`, 'ok')
+  const { flush } = attachStreams(child, win, project.id, {
+    onChunk: (text) => {
+      if (!entry.url) {
+        const url = extractUrl(text)
+        if (url) {
+          entry.url = url
+          send(win, 'proc:state', { projectId: project.id, status: 'running', url: entry.url })
+          emitLog(win, project.id, `▸ serveur prêt : ${url}`, 'ok')
+        }
       }
     }
-  }
-  child.stdout.on('data', (c) => scan(c, 'out'))
-  child.stderr.on('data', (c) => scan(c, 'err'))
+  })
+  entry.flush = flush
+
+  child.on('error', (e) => {
+    flush()
+    running.delete(project.id)
+    log(win, project.id, `▸ échec démarrage : ${e.message}`, 'err')
+    send(win, 'proc:state', { projectId: project.id, status: 'error', url: null })
+  })
 
   child.on('close', (code) => {
+    flush()
     running.delete(project.id)
     lastLog.delete(project.id)
-    log(win, project.id, `serveur arrêté (code ${code})`, code === 0 ? 'meta' : 'err')
+    log(win, project.id, `▸ serveur arrêté (code ${code ?? '?'})`, code === 0 || code == null ? 'meta' : 'err')
     send(win, 'proc:state', { projectId: project.id, status: 'stopped', url: null })
   })
 
@@ -147,9 +184,10 @@ export function startDev(win, project, command) {
 export function stopDev(projectId) {
   const entry = running.get(projectId)
   if (!entry) return { ok: false }
+  try { entry.flush?.() } catch { /* ignore */ }
   const pid = entry.child.pid
   try {
-    if (isWin) spawn('taskkill', ['/pid', String(pid), '/T', '/F'])
+    if (isWin) spawn('taskkill', ['/pid', String(pid), '/T', '/F'], { windowsHide: true })
     else process.kill(-pid, 'SIGTERM')
   } catch {
     try { entry.child.kill('SIGKILL') } catch { /* ignore */ }

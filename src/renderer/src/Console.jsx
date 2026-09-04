@@ -247,15 +247,19 @@ export default function ConsolePanel({
             {visible.length === 0 ? (
               <span style={{ color: 'var(--text-3)' }}>
                 {filter === 'all'
-                  ? 'Les créations, installations, builds et serveurs s’affichent ici.'
-                  : 'Pas encore de sortie pour ce projet.'}
+                  ? 'Lance un projet : créations, installs, builds et serveurs s’affichent ici en direct.'
+                  : 'Pas encore de sortie pour ce projet — relance-le ou regarde l’onglet Tous.'}
               </span>
             ) : (
               visible.map((l, i) => {
                 const color = colorFor(l.projectId, rankOf.get(l.projectId) ?? -1)
-                const name = byId[l.projectId]?.name || l.projectId
+                const name = byId[l.projectId]?.name || (l.projectId === 'system' ? 'système' : l.projectId)
+                const time = l.at
+                  ? new Date(l.at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                  : ''
                 return (
-                  <div className={`line ${l.kind}`} key={`${l.at || 0}-${i}`}>
+                  <div className={`line ${l.kind}`} key={`${l.at || 0}-${i}-${l.line?.slice(0, 24) || ''}`}>
+                    {time && <span className="console-time" title={time}>{time}</span>}
                     {filter === 'all' && (
                       <button
                         type="button"
