@@ -35,8 +35,28 @@
   "build": {
     "appId": "com.pdcdesign.builder",
     "productName": "PDC Builder",
-    "directories": { "output": "release" },
-    "files": ["out/**/*", "resources/**/*"],
+    "directories": {
+      "output": "release",
+      "buildResources": "resources"
+    },
+    "files": [
+      "out/**/*",
+      "resources/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/icon.ico",
+        "to": "resources/icon.ico"
+      },
+      {
+        "from": "resources/icon.png",
+        "to": "resources/icon.png"
+      },
+      {
+        "from": "resources/logo-pdc.jpg",
+        "to": "resources/logo-pdc.jpg"
+      }
+    ],
     "publish": {
       "provider": "github",
       "owner": "ebarnabo",
@@ -45,11 +65,19 @@
     },
     "mac": {
       "category": "public.app-category.developer-tools",
-      "target": ["dmg", "zip"],
+      "icon": "resources/icon.png",
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "artifactName": "PDC-Builder-${version}-${arch}.${ext}"
     },
     "win": {
-      "target": ["nsis", "portable"],
+      "icon": "resources/icon.ico",
+      "target": [
+        "nsis",
+        "portable"
+      ],
       "verifyUpdateCodeSignature": false
     },
     "nsis": {
@@ -62,6 +90,9 @@
     }
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["electron", "esbuild"]
+    "onlyBuiltDependencies": [
+      "electron",
+      "esbuild"
+    ]
   }
 }

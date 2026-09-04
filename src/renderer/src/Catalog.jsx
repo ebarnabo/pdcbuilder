@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Plus, Trash2, Pencil, RotateCcw, Package, Terminal, BookOpen } from 'lucide-react'
 import { Modal, Field, Segmented, Chevron, SearchBox, ScoreStrip, Confirm } from './ui.jsx'
+import { CatalogSync } from './CatalogSync.jsx'
 import { api } from './bridge.js'
 const blankFw = {
   id: '', name: '', tag: '', description: '',
@@ -131,6 +132,7 @@ export default function Catalog({ state, refresh, toast, tab, setTab, docsStatus
         })}>
           <RotateCcw size={15} /> Réinitialiser
         </button>
+        <CatalogSync state={state} refresh={refresh} toast={toast} />
         <button className="btn primary" onClick={() => (tab === 'frameworks' ? setEditFw(blankFw) : setEditLib({ category: state.libraries[0]?.id }))}>
           <Plus size={15} /> Ajouter
         </button>
@@ -206,7 +208,11 @@ export default function Catalog({ state, refresh, toast, tab, setTab, docsStatus
                   <div className="lib" key={i.pkg}>
                     <Package size={16} color="var(--text-3)" style={{ marginTop: 2, flex: 'none' }} />
                     <span style={{ flex: 1, minWidth: 0 }}>
-                      <strong>{i.name}{i.dev && <span className="chip" style={{ marginLeft: 6, height: 18 }}>dev</span>}</strong>
+                      <strong>
+                        {i.name}
+                        {i.dev && <span className="chip" style={{ marginLeft: 6, height: 18 }}>dev</span>}
+                        {i.version && <span className="chip" style={{ marginLeft: 6, height: 18 }}>{i.version}</span>}
+                      </strong>
                       <small>{i.description}</small>
                       <small className="mono" style={{ color: 'var(--accent)', marginTop: 4 }}>{i.pkg}</small>
                     </span>

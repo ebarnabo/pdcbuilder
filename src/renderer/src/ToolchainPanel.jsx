@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowUpCircle, Download, RefreshCw, Trash2 } from 'lucide-react'
+import { ArrowUpCircle, ClipboardCopy, Download, RefreshCw, Trash2 } from 'lucide-react'
 import { Confirm, Field } from './ui.jsx'
 import { api } from './bridge.js'
 
@@ -103,11 +103,40 @@ export function ToolchainPanel({ toast }) {
       : `${data.installer.label} est introuvable — installe-le pour ajouter ou retirer des SDK.`)
     : 'Détection des runtimes et outils installés sur la machine.'
 
+  const copyStack = async () => {
+    if (!data) return
+    const payload = {
+      format: 'pdc-toolchain',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      platform: data.platform,
+      python: (data.python || []).filter((p) => p.installed).map((p) => ({
+        id: p.id, name: p.name, version: p.version, path: p.path, default: p.isDefault
+      })),
+      tools: (data.tools || []).filter((t) => t.installed).map((t) => ({
+        id: t.id, name: t.name, version: t.version
+      })),
+      available: {
+        python: (data.python || []).filter((p) => !p.installed && p.canInstall).map((p) => p.id),
+        tools: (data.tools || []).filter((t) => !t.installed && t.canInstall).map((t) => t.id)
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(payload, null, 2))
+      toast?.(`Stack copiée · ${payload.python.length} Python, ${payload.tools.length} outils`)
+    } catch {
+      toast?.('Impossible de copier dans le presse-papiers', true)
+    }
+  }
+
   return (
     <Field label="SDK & outils de développement" hint={installerHint}>
       <div className="pm-toolbar">
         <button type="button" className="btn sm ghost" disabled={!!busy || checking} onClick={reload}>
           <RefreshCw size={13} className={checking ? 'spin' : ''} /> Actualiser
+        </button>
+        <button type="button" className="btn sm ghost" disabled={!data || checking} onClick={copyStack}>
+          <ClipboardCopy size={13} /> Copier JSON
         </button>
         {data?.pythons?.length > 0 && (
           <span className="chip accent">

@@ -21,6 +21,24 @@ const isMac = platform() === 'darwin'
 const isDev = Boolean(process.env.ELECTRON_RENDERER_URL)
 let win = null
 
+function resolveAppIcon() {
+  const names = isMac
+    ? ['icon.icns', 'icon.png', 'logo-pdc.jpg']
+    : ['icon.ico', 'icon.png', 'logo-pdc.jpg']
+  const roots = [
+    join(__dirname, '../../resources'),
+    join(process.resourcesPath || '', 'resources'),
+    join(app.getAppPath(), 'resources')
+  ]
+  for (const root of roots) {
+    for (const name of names) {
+      const candidate = join(root, name)
+      if (existsSync(candidate)) return candidate
+    }
+  }
+  return undefined
+}
+
 function resolvePreload() {
   const dir = join(__dirname, '../preload')
   for (const name of ['index.cjs', 'index.mjs', 'index.js']) {
@@ -118,6 +136,7 @@ async function ensureProjectReady(projectId, projectPath) {
 
 function createWindow() {
   const preload = resolvePreload()
+  const icon = resolveAppIcon()
   win = new BrowserWindow({
     width: 1320,
     height: 880,
@@ -130,12 +149,17 @@ function createWindow() {
     trafficLightPosition: { x: 16, y: 16 },
     titleBarOverlay: false,
     vibrancy: isMac ? 'under-window' : undefined,
+    ...(icon ? { icon } : {}),
     webPreferences: {
       preload,
       sandbox: false,
       contextIsolation: true
     }
   })
+
+  if (icon && process.platform === 'win32') {
+    try { win.setIcon(icon) } catch { /* ignore */ }
+  }
 
   const reveal = () => { if (win && !win.isDestroyed() && !win.isVisible()) win.show() }
   win.once('ready-to-show', reveal)
@@ -191,6 +215,10 @@ ipcMain.handle('window:is-maximized', () => Boolean(win && !win.isDestroyed() &&
 
 app.whenReady().then(() => {
   if (!isMac) app.setAppUserModelId('com.pdcdesign.builder')
+  const icon = resolveAppIcon()
+  if (icon && isMac && app.dock) {
+    try { app.dock.setIcon(icon) } catch { /* ignore */ }
+  }
   createWindow()
   updater.attach(win)
   updater.start()

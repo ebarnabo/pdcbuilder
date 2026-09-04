@@ -1,5 +1,8 @@
-import { useState, useEffect } from 'react'
-import { RefreshCw, Check, FolderOpen, Download, BookOpen, FileText } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import {
+  RefreshCw, Check, FolderOpen, Download, BookOpen, FileText,
+  Palette, Wrench, Boxes, Sparkles, Database, Github, Cpu, FileCode2
+} from 'lucide-react'
 import { Field, ScoreNotes } from './ui.jsx'
 import { GitFields, GitStatus } from './GitFields.jsx'
 import { DatabasePicker } from './DatabaseFields.jsx'
@@ -8,6 +11,36 @@ import { PackageManagerPicker } from './PackageManagerPicker.jsx'
 import { ToolchainPanel } from './ToolchainPanel.jsx'
 import { UI_THEMES, applyUiTheme, BrandMark } from './Brand.jsx'
 import { api } from './bridge.js'
+
+const SECTIONS = [
+  { id: 'apparence', label: 'Apparence', icon: Palette },
+  { id: 'atelier', label: 'Atelier', icon: Wrench },
+  { id: 'sdk', label: 'SDK & outils', icon: Cpu },
+  { id: 'git', label: 'Dépôts Git', icon: Github },
+  { id: 'database', label: 'Bases', icon: Database },
+  { id: 'ai', label: 'IA', icon: Sparkles },
+  { id: 'docs', label: 'Docs', icon: BookOpen },
+  { id: 'prefs', label: 'Agents', icon: FileCode2 },
+  { id: 'app', label: 'Application', icon: Boxes }
+]
+
+function SettingsNav({ active, onJump }) {
+  return (
+    <nav className="settings-nav" aria-label="Sections des réglages">
+      {SECTIONS.map(({ id, label, icon: Icon }) => (
+        <button
+          key={id}
+          type="button"
+          className={`settings-nav-item${active === id ? ' on' : ''}`}
+          onClick={() => onJump(id)}
+        >
+          <Icon size={14} strokeWidth={1.8} />
+          <span>{label}</span>
+        </button>
+      ))}
+    </nav>
+  )
+}
 
 export default function Settings({ state, refresh, toast, update, docsStatus }) {
   const [providers, setProviders] = useState({})
@@ -21,10 +54,38 @@ export default function Settings({ state, refresh, toast, update, docsStatus }) 
   const [databasePref, setDatabasePref] = useState(state.database || { defaultId: 'none' })
   const [packageManager, setPackageManager] = useState(state.packageManager || 'npm')
   const [uiTheme, setUiTheme] = useState(state.uiTheme || 'cap')
+  const [activeSection, setActiveSection] = useState('apparence')
+  const rootRef = useRef(null)
 
   useEffect(() => { api.ai.providers().then(setProviders) }, [])
   useEffect(() => { api.git.status().then(setGitStatus) }, [])
   useEffect(() => { setUiTheme(state.uiTheme || 'cap') }, [state.uiTheme])
+
+  useEffect(() => {
+    const root = rootRef.current
+    if (!root) return undefined
+    const nodes = [...root.querySelectorAll('[data-settings-section]')]
+    if (!nodes.length) return undefined
+    const io = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)
+        if (visible[0]?.target?.dataset?.settingsSection) {
+          setActiveSection(visible[0].target.dataset.settingsSection)
+        }
+      },
+      { root: root.closest('.content') || null, rootMargin: '-12% 0px -55% 0px', threshold: [0.15, 0.4, 0.7] }
+    )
+    nodes.forEach((n) => io.observe(n))
+    return () => io.disconnect()
+  }, [])
+
+  const jump = (id) => {
+    const el = rootRef.current?.querySelector(`[data-settings-section="${id}"]`)
+    el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    setActiveSection(id)
+  }
 
   const save = async (fields) => { await api.state.patch(fields); refresh() }
   const saveGit = (next) => {
@@ -58,15 +119,17 @@ export default function Settings({ state, refresh, toast, update, docsStatus }) 
   const needsKey = providers[ai.provider]?.needsKey
 
   return (
-    <>
-      <div className="section-head">
+    <div className="settings-layout" ref={rootRef}>
+      <div className="section-head settings-head">
         <div style={{ flex: 1 }}>
           <h3>Réglages</h3>
-          <p>Atelier, SDK (Python…), dépôts, comptes des bases (CLI / MCP) et moteur d’IA.</p>
+          <p>Sections rangées — utilise les raccourcis pour aller directement au bon bloc.</p>
         </div>
       </div>
 
-      <div className="card">
+      <SettingsNav active={activeSection} onJump={jump} />
+
+      <section className="card settings-section" data-settings-section="apparence" id="settings-apparence">
         <h4 className="card-title">Apparence</h4>
         <p className="card-desc">
           Le thème Cap reprend le logo (navy → cyan). Atelier garde l’ambiance ambrée d’origine.
@@ -101,10 +164,11 @@ export default function Settings({ state, refresh, toast, update, docsStatus }) 
             </button>
           ))}
         </div>
-      </div>
+      </section>
 
-      <div className="card">
+      <section className="card settings-section" data-settings-section="atelier" id="settings-atelier">
         <h4 className="card-title">Atelier</h4>
+        <p className="card-desc">Dossier des projets, éditeur et gestionnaire de paquets JS par défaut.</p>
         <Field label="Dossier des projets">
           <div className="row">
             <input className="input mono" value={workspace} onChange={(e) => setWorkspace(e.target.value)} onBlur={() => save({ workspace })} />
@@ -120,123 +184,27 @@ export default function Settings({ state, refresh, toast, update, docsStatus }) 
           onChange={(id) => { setPackageManager(id); save({ packageManager: id }) }}
           toast={toast}
         />
-        <div style={{ marginTop: 20 }}>
-          <ToolchainPanel toast={toast} />
-        </div>
-      </div>
+      </section>
 
-      <div className="card">
-        <h4 className="card-title">Préférences pour les agents IA</h4>
+      <section className="card settings-section" data-settings-section="sdk" id="settings-sdk">
+        <h4 className="card-title">SDK & outils</h4>
         <p className="card-desc">
-          Tous les réglages (atelier, Git, bases, catalogue, projets) sont exportés en
-          <code> preferences.md</code> et copiés dans chaque projet sous
-          <code> .pdc/preferences.md</code>. L’assistant intégré et les agents externes (Cursor, etc.) peuvent s’y référer.
-          Les secrets (clés API, tokens) ne sont jamais écrits en clair.
+          Python multi-versions, runtimes et CLIs utiles au code. Installer, mettre à jour ou supprimer depuis ici.
         </p>
-        <div className="row" style={{ justifyContent: 'flex-start' }}>
-          <button className="btn none" onClick={() => api.preferences.open()}>
-            <FileText size={16} /> Ouvrir le dossier
-          </button>
-        </div>
-      </div>
+        <ToolchainPanel toast={toast} />
+      </section>
 
-      <div className="card">
-        <h4 className="card-title">Application</h4>
-        <p className="card-desc">
-          Les mises à jour se téléchargent automatiquement en arrière-plan. Quand c’est prêt, un clic redémarre sur la nouvelle version — pas besoin de re-télécharger l’installeur.
-        </p>
-        <div className="row" style={{ alignItems: 'center' }}>
-          <Field label="Version installée">
-            <input className="input mono" readOnly value={update?.current || '…'} />
-          </Field>
-          <Field label="Statut">
-            <input className="input" readOnly value={
-              update?.status === 'ready' ? `Prête · ${update.version}`
-                : update?.status === 'downloading' ? `Téléchargement ${Math.round(update.percent || 0)} %`
-                  : update?.status === 'checking' ? 'Recherche…'
-                    : update?.status === 'none' ? 'À jour'
-                      : update?.status === 'dev' ? 'Mode développement — packager pour activer'
-                        : update?.status === 'error' ? (update.error || 'Erreur')
-                          : 'En attente'
-            } />
-          </Field>
-        </div>
-        {update?.status === 'downloading' && (
-          <div className="update-bar-track" style={{ marginTop: 8 }} aria-hidden>
-            <i className="update-bar-fill" style={{ width: `${Math.max(4, Math.round(update.percent || 0))}%` }} />
-          </div>
-        )}
-        <div className="row" style={{ justifyContent: 'flex-start' }}>
-          <button className="btn none" onClick={async () => {
-            const r = await api.app.checkUpdate()
-            if (r?.status === 'dev') toast('Les mises à jour marchent sur l’app installée, pas en dev.')
-            else if (r?.status === 'error') toast(r.error || 'Vérification impossible', true)
-            else toast('Recherche de mise à jour…')
-          }}>
-            <RefreshCw size={16} className={update?.status === 'checking' || update?.status === 'downloading' ? 'spin' : ''} /> Vérifier
-          </button>
-          {update?.status === 'ready' && (
-            <button className="btn primary" onClick={() => api.app.installUpdate()}>
-              <Download size={16} /> Installer et redémarrer
-            </button>
-          )}
-          {state.onboarding?.completed && (
-            <button className="btn none" onClick={() => save({ onboarding: { ...state.onboarding, completed: false } })}>
-              Relancer l’introduction
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div className="card">
-        <h4 className="card-title">Documentation des librairies</h4>
-        <p className="card-desc">
-          Au démarrage, l’app récupère en silence les liens officiels (npm, README, llms.txt, pages docs)
-          et les extrait en fichiers Markdown. L’assistant s’en sert ; chaque projet reçoit une copie dans
-          <code> .pdc/docs</code>, avec les préférences dans <code>.pdc/preferences.md</code>.
-        </p>
-        <div className="row" style={{ alignItems: 'center' }}>
-          <Field label="Statut">
-            <input className="input" readOnly value={
-              docsStatus?.status === 'running'
-                ? `Mise à jour silencieuse… ${docsStatus.done}/${docsStatus.total}${docsStatus.current ? ` · ${docsStatus.current}` : ''}`
-                : docsStatus?.lastRun
-                  ? `À jour · ${docsStatus.updated || 0} extraits, ${docsStatus.failed || 0} échecs`
-                  : docsStatus?.total
-                    ? `${docsStatus.done || 0}/${docsStatus.total}`
-                    : 'En attente de la première passe'
-            } />
-          </Field>
-        </div>
-        <div className="row" style={{ justifyContent: 'flex-start' }}>
-          <button className="btn none" onClick={async () => {
-            toast('Mise à jour des docs en arrière-plan…')
-            api.docs.refresh()
-          }}>
-            <RefreshCw size={16} /> Rafraîchir
-          </button>
-          <button className="btn none" onClick={() => api.docs.open()}>
-            <BookOpen size={16} /> Ouvrir le dossier
-          </button>
-        </div>
-      </div>
-
-      <div className="card">
+      <section className="card settings-section" data-settings-section="git" id="settings-git">
         <h4 className="card-title">Dépôts Git</h4>
         <p className="card-desc">
           Un dépôt GitHub ou Cursor Origin peut être créé avec le projet, ou cloné depuis Projets → Récupérer.
-          Le push et le pull se font ensuite dans le menu de la carte. Ces options sont mémorisées pour les créations.
+          Le push et le pull se font ensuite dans le menu de la carte.
         </p>
-        <GitFields
-          value={git}
-          status={gitStatus}
-          showAuto
-          onChange={(next) => saveGit(next)}
-        />
+        <GitFields value={git} status={gitStatus} showAuto onChange={(next) => saveGit(next)} />
         <GitStatus status={gitStatus} onRefresh={() => api.git.status().then(setGitStatus)} />
-      </div>
+      </section>
 
-      <div className="card">
+      <section className="card settings-section" data-settings-section="database" id="settings-database">
         <h4 className="card-title">Base de données</h4>
         <p className="card-desc">Choix par défaut, puis les comptes CLI / MCP pour créer et gérer les bases depuis l’app.</p>
         <DatabasePicker
@@ -258,9 +226,9 @@ export default function Settings({ state, refresh, toast, update, docsStatus }) 
             toast={toast}
           />
         </div>
-      </div>
+      </section>
 
-      <div className="card">
+      <section className="card settings-section" data-settings-section="ai" id="settings-ai">
         <h4 className="card-title">Intelligence artificielle</h4>
         <p className="card-desc">Local = hors ligne. API = une clé, stockée ici seulement.</p>
 
@@ -306,7 +274,98 @@ export default function Settings({ state, refresh, toast, update, docsStatus }) 
             <RefreshCw size={16} className={testing ? 'spin' : ''} /> {testing ? 'Test…' : 'Détecter les modèles'}
           </button>
         </div>
-      </div>
-    </>
+      </section>
+
+      <section className="card settings-section" data-settings-section="docs" id="settings-docs">
+        <h4 className="card-title">Documentation des librairies</h4>
+        <p className="card-desc">
+          Au démarrage, l’app récupère en silence les liens officiels (npm, README, llms.txt, pages docs)
+          et les extrait en fichiers Markdown. L’assistant s’en sert ; chaque projet reçoit une copie dans
+          <code> .pdc/docs</code>.
+        </p>
+        <div className="row" style={{ alignItems: 'center' }}>
+          <Field label="Statut">
+            <input className="input" readOnly value={
+              docsStatus?.status === 'running'
+                ? `Mise à jour silencieuse… ${docsStatus.done}/${docsStatus.total}${docsStatus.current ? ` · ${docsStatus.current}` : ''}`
+                : docsStatus?.lastRun
+                  ? `À jour · ${docsStatus.updated || 0} extraits, ${docsStatus.failed || 0} échecs`
+                  : docsStatus?.total
+                    ? `${docsStatus.done || 0}/${docsStatus.total}`
+                    : 'En attente de la première passe'
+            } />
+          </Field>
+        </div>
+        <div className="row" style={{ justifyContent: 'flex-start' }}>
+          <button className="btn none" onClick={() => { toast('Mise à jour des docs en arrière-plan…'); api.docs.refresh() }}>
+            <RefreshCw size={16} /> Rafraîchir
+          </button>
+          <button className="btn none" onClick={() => api.docs.open()}>
+            <BookOpen size={16} /> Ouvrir le dossier
+          </button>
+        </div>
+      </section>
+
+      <section className="card settings-section" data-settings-section="prefs" id="settings-prefs">
+        <h4 className="card-title">Préférences pour les agents IA</h4>
+        <p className="card-desc">
+          Tous les réglages sont exportés en <code> preferences.md</code> et copiés dans chaque projet sous
+          <code> .pdc/preferences.md</code>. Les secrets ne sont jamais écrits en clair.
+        </p>
+        <div className="row" style={{ justifyContent: 'flex-start' }}>
+          <button className="btn none" onClick={() => api.preferences.open()}>
+            <FileText size={16} /> Ouvrir le dossier
+          </button>
+        </div>
+      </section>
+
+      <section className="card settings-section" data-settings-section="app" id="settings-app">
+        <h4 className="card-title">Application</h4>
+        <p className="card-desc">
+          Les mises à jour se téléchargent automatiquement. Quand c’est prêt, un clic redémarre sur la nouvelle version.
+        </p>
+        <div className="row" style={{ alignItems: 'center' }}>
+          <Field label="Version installée">
+            <input className="input mono" readOnly value={update?.current || '…'} />
+          </Field>
+          <Field label="Statut">
+            <input className="input" readOnly value={
+              update?.status === 'ready' ? `Prête · ${update.version}`
+                : update?.status === 'downloading' ? `Téléchargement ${Math.round(update.percent || 0)} %`
+                  : update?.status === 'checking' ? 'Recherche…'
+                    : update?.status === 'none' ? 'À jour'
+                      : update?.status === 'dev' ? 'Mode développement — packager pour activer'
+                        : update?.status === 'error' ? (update.error || 'Erreur')
+                          : 'En attente'
+            } />
+          </Field>
+        </div>
+        {update?.status === 'downloading' && (
+          <div className="update-bar-track" style={{ marginTop: 8 }} aria-hidden>
+            <i className="update-bar-fill" style={{ width: `${Math.max(4, Math.round(update.percent || 0))}%` }} />
+          </div>
+        )}
+        <div className="row" style={{ justifyContent: 'flex-start' }}>
+          <button className="btn none" onClick={async () => {
+            const r = await api.app.checkUpdate()
+            if (r?.status === 'dev') toast('Les mises à jour marchent sur l’app installée, pas en dev.')
+            else if (r?.status === 'error') toast(r.error || 'Vérification impossible', true)
+            else toast('Recherche de mise à jour…')
+          }}>
+            <RefreshCw size={16} className={update?.status === 'checking' || update?.status === 'downloading' ? 'spin' : ''} /> Vérifier
+          </button>
+          {update?.status === 'ready' && (
+            <button className="btn primary" onClick={() => api.app.installUpdate()}>
+              <Download size={16} /> Installer et redémarrer
+            </button>
+          )}
+          {state.onboarding?.completed && (
+            <button className="btn none" onClick={() => save({ onboarding: { ...state.onboarding, completed: false } })}>
+              Relancer l’introduction
+            </button>
+          )}
+        </div>
+      </section>
+    </div>
   )
 }
