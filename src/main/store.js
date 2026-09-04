@@ -665,7 +665,18 @@ export const DEFAULTS = {
     baseUrl: 'http://localhost:11434',
     model: 'qwen2.5-coder:7b',
     apiKey: '',
-    temperature: 0.4
+    temperature: 0.4,
+    /** Instructions utilisateur ajoutées au prompt système de l’agent. */
+    systemPrompt: ''
+  },
+  /** Affichage des actions optionnelles sur les cartes projet. */
+  projectCard: {
+    agent: true,
+    build: true,
+    pull: true,
+    push: true,
+    out: true,
+    preview: true
   },
   git: {
     autoCreate: true,
@@ -762,6 +773,7 @@ export function read() {
         ...DEFAULTS,
         ...parsed,
         ai: { ...DEFAULTS.ai, ...(parsed.ai || {}) },
+        projectCard: { ...DEFAULTS.projectCard, ...(parsed.projectCard || {}) },
         git: { ...DEFAULTS.git, ...(parsed.git || {}) },
         database: {
           ...DEFAULTS.database,

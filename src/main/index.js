@@ -1166,6 +1166,9 @@ ipcMain.handle('ai:chat', async (_e, { chatId, messages, context, libs, projectI
     'Design : dark chaud, rayons 16–36px, grille de 8px, Inter, animations 60 fps.',
     'Les préférences complètes sont dans preferences.md (copie projet : .pdc/preferences.md).',
     prefContext,
+    s.ai?.systemPrompt?.trim()
+      ? `Instructions utilisateur pour l’agent :\n${s.ai.systemPrompt.trim()}`
+      : '',
     active ? `Projet actif pour cette conversation : **${active.name}** (\`${active.id}\`) — \`${active.path}\`` : '',
     context ? `Contexte:\n${context}` : '',
     docContext

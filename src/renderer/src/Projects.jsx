@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import {
   Play, Square, Hammer, FolderOpen, Copy, Trash2, Globe, Plus, Package,
   Code2, Layers, MoreHorizontal, FolderInput, Bookmark, Boxes, ExternalLink,
-  Github, CheckSquare, CloudUpload, CloudDownload, Link2, Database, Tag, Search, RefreshCw, GanttChart, Sparkles
+  Github, CloudUpload, CloudDownload, Link2, Database, Tag, Search, RefreshCw, Sparkles
 } from 'lucide-react'
 import { Modal, Menu, Field, SearchBox, LibraryPicker, Empty, bytes, ago, shortPath, Segmented, ScoreNotes, Confirm } from './ui.jsx'
 import { GitFields, RepoChip, CloneModal } from './GitFields.jsx'
@@ -12,8 +12,8 @@ import { librariesFor, keepCompatible, filterLibraryItems, countCatalogLibraries
 import { ThemePicker, themeLabel, toggleTheme } from './themes.jsx'
 import { categoryLabel, isExperience } from './experienceMeta.js'
 import PushBoard from './PushBoard.jsx'
-import { ChecklistSnippet, ChecklistModal, checklistStats } from './ProjectChecklist.jsx'
-import { StagesSnippet, StagesModal, stagesStats } from './ProjectStages.jsx'
+import { ChecklistModal } from './ProjectChecklist.jsx'
+import { StagesModal } from './ProjectStages.jsx'
 import ProjectDetail from './ProjectDetail.jsx'
 import { api } from './bridge.js'
 
@@ -259,9 +259,8 @@ export default function Projects({
               onMenu={(el) => setMenu(menu?.id === p.id ? null : { id: p.id, el })}
               onTheme={(id) => setThemeFilter((cur) => toggleTheme(cur, id))}
               onPush={() => setRepo(p)}
-              onIdeas={() => setIdeasFor(p)}
-              onStages={() => setStagesFor(p)}
               onAskAgent={onAskAgent}
+              cardActions={state.projectCard}
               act={act}
               focusProject={focusProject}
               toast={toast}
@@ -282,8 +281,6 @@ export default function Projects({
           onRepo={setRepo}
           onDatabase={setDb}
           onThemes={setThemesFor}
-          onIdeas={setIdeasFor}
-          onStages={setStagesFor}
           onAskAgent={onAskAgent}
           onOpen={(p) => setDetailId(p.id)}
           act={act}
@@ -429,14 +426,20 @@ export default function Projects({
 
 /* ─────────────────────────  carte projet  ───────────────────────── */
 
-function ProjectCard({ project: p, framework: fw, build, index, onOpen, onMenu, onTheme, onPush, onIdeas, onStages, onAskAgent, act, focusProject, toast }) {
+function ProjectCard({ project: p, framework: fw, build, index, onOpen, onMenu, onTheme, onPush, onAskAgent, act, focusProject, toast, cardActions }) {
   const btnRef = useRef(null)
   const remote = Boolean(p.remoteOnly)
   const busy = p.status === 'scaffolding' || p.status === 'cloning'
   const live = !remote && (p.status === 'running' || p.status === 'starting')
   const needsPush = !remote && !p.repo?.url
-  const ideas = checklistStats(p.checklist)
-  const stages = stagesStats(p.stages)
+  const show = {
+    agent: cardActions?.agent !== false,
+    build: cardActions?.build !== false,
+    pull: cardActions?.pull !== false,
+    push: cardActions?.push !== false,
+    out: cardActions?.out !== false,
+    preview: cardActions?.preview !== false
+  }
 
   const statusLabel = remote ? 'Sur GitHub · pas encore local'
     : p.status === 'cloning' ? 'Clonage du dépôt'
@@ -499,16 +502,6 @@ function ProjectCard({ project: p, framework: fw, build, index, onOpen, onMenu, 
         <RepoChip repo={p.repo} onOpen={(url) => api.fs.openUrl(url)} />
         {!remote && p.exists === false && <span className="chip err">dossier introuvable</span>}
         {needsPush && <span className="chip">Brouillon local</span>}
-        {ideas.total > 0 && (
-          <button type="button" className={`chip link${ideas.open ? ' accent' : ''}`} onClick={onIdeas}>
-            <CheckSquare size={11} /> {ideas.done}/{ideas.total} idées
-          </button>
-        )}
-        {stages.total > 0 && (
-          <button type="button" className="chip link accent" onClick={onStages}>
-            <GanttChart size={11} /> {stages.done}/{stages.total} étapes
-          </button>
-        )}
       </div>
 
       <div className="status" onClick={stop}>
@@ -521,13 +514,6 @@ function ProjectCard({ project: p, framework: fw, build, index, onOpen, onMenu, 
           </a>
         )}
       </div>
-
-      {!remote && (
-        <div onClick={stop}>
-          <ChecklistSnippet project={p} onOpen={onIdeas} act={act} />
-          <StagesSnippet project={p} onOpen={onStages} />
-        </div>
-      )}
 
       {busy && <div className="progress"><i /></div>}
 
@@ -565,19 +551,23 @@ function ProjectCard({ project: p, framework: fw, build, index, onOpen, onMenu, 
         )}
         {!remote && (
           <>
-            <button
-              className="btn sm accent-ghost"
-              disabled={busy}
-              title="Ouvrir l’agent IA sur ce projet"
-              onClick={() => onAskAgent?.({ projectId: p.id })}
-            >
-              <Sparkles size={13} /> Agent
-            </button>
-            <button className="btn sm" disabled={busy}
-              onClick={() => { focusProject(p.id); act(() => api.run.build(p.id), 'Build terminé') }}>
-              <Hammer size={13} /> Build
-            </button>
-            {p.repo?.url && !needsPush && (
+            {show.agent && (
+              <button
+                className="btn sm accent-ghost"
+                disabled={busy}
+                title="Ouvrir l’agent IA sur ce projet"
+                onClick={() => onAskAgent?.({ projectId: p.id })}
+              >
+                <Sparkles size={13} /> Agent
+              </button>
+            )}
+            {show.build && (
+              <button className="btn sm" disabled={busy}
+                onClick={() => { focusProject(p.id); act(() => api.run.build(p.id), 'Build terminé') }}>
+                <Hammer size={13} /> Build
+              </button>
+            )}
+            {show.pull && p.repo?.url && !needsPush && (
               <button
                 className="btn sm"
                 disabled={busy}
@@ -587,12 +577,12 @@ function ProjectCard({ project: p, framework: fw, build, index, onOpen, onMenu, 
                 <CloudDownload size={13} /> Pull
               </button>
             )}
-            {needsPush && (
+            {show.push && needsPush && (
               <button className="btn sm" onClick={onPush}>
                 <CloudUpload size={13} /> Push GitHub
               </button>
             )}
-            {!needsPush && p.repo?.url && (
+            {show.push && !needsPush && p.repo?.url && (
               <button
                 className="btn sm ghost"
                 disabled={busy || live}
@@ -602,10 +592,12 @@ function ProjectCard({ project: p, framework: fw, build, index, onOpen, onMenu, 
                 <CloudUpload size={13} /> Push
               </button>
             )}
-            <button className="btn sm ghost" onClick={() => act(() => api.run.openBuild(p.id))}>
-              <FolderOpen size={13} /> Sortie
-            </button>
-            {build?.exists && (
+            {show.out && (
+              <button className="btn sm ghost" onClick={() => act(() => api.run.openBuild(p.id))}>
+                <FolderOpen size={13} /> Sortie
+              </button>
+            )}
+            {show.preview && build?.exists && (
               <button className="btn sm ghost" onClick={() => act(() => api.run.openBuildFile(p.id))}>Aperçu</button>
             )}
           </>
@@ -615,7 +607,7 @@ function ProjectCard({ project: p, framework: fw, build, index, onOpen, onMenu, 
   )
 }
 
-function ProjectMenu({ project: p, anchor, editor, onClose, onDuplicate, onDelete, onAddLibs, onRepo, onDatabase, onThemes, onIdeas, onStages, onAskAgent, onOpen, act }) {
+function ProjectMenu({ project: p, anchor, editor, onClose, onDuplicate, onDelete, onAddLibs, onRepo, onDatabase, onThemes, onAskAgent, onOpen, act }) {
   if (!p) return null
   const run = (fn) => { onClose(); fn() }
   const remote = Boolean(p.remoteOnly)
@@ -667,8 +659,6 @@ function ProjectMenu({ project: p, anchor, editor, onClose, onDuplicate, onDelet
       )}
       <button onClick={() => run(() => onDatabase(p))}><Database size={15} /> Configurer la base</button>
       <button onClick={() => run(() => onThemes(p))}><Tag size={15} /> Thèmes</button>
-      <button onClick={() => run(() => onIdeas(p))}><CheckSquare size={15} /> Idées</button>
-      <button onClick={() => run(() => onStages?.(p))}><GanttChart size={15} /> Planning Gantt</button>
       <button onClick={() => run(() => onDuplicate(p))}><Copy size={15} /> Dupliquer</button>
       <button onClick={() => run(() => act(() => api.blueprint.fromProject({ id: p.id, name: `Base ${p.name}` }), 'Blueprint créé'))}>
         <Bookmark size={15} /> En faire un blueprint

@@ -102,6 +102,20 @@ export function renderMarkdown(state) {
     `- **Modèle** : \`${ai.model || ''}\``,
     `- **Température** : ${ai.temperature ?? 0.4}`,
     `- **Clé API** : ${configured(ai.apiKey)}`,
+    ai.systemPrompt?.trim()
+      ? [
+          '',
+          '### Prompt système personnalisé',
+          '',
+          '```',
+          ai.systemPrompt.trim(),
+          '```'
+        ].join('\n')
+      : null,
+    '',
+    '## Cartes projets (actions visibles)',
+    '',
+    ...Object.entries(s.projectCard || {}).map(([k, v]) => `- **${k}** : ${yesNo(v)}`),
     '',
     '## Introduction',
     '',

@@ -24,6 +24,15 @@ export const SETTINGS_SECTIONS = [
   { id: 'app', label: 'Application', icon: Boxes }
 ]
 
+const PROJECT_CARD_TOGGLES = [
+  { id: 'agent', label: 'Agent IA' },
+  { id: 'build', label: 'Build' },
+  { id: 'pull', label: 'Pull' },
+  { id: 'push', label: 'Push / Push GitHub' },
+  { id: 'out', label: 'Sortie (dossier build)' },
+  { id: 'preview', label: 'Aperçu build' }
+]
+
 export default function Settings({
   state,
   refresh,
@@ -45,12 +54,32 @@ export default function Settings({
   const [databasePref, setDatabasePref] = useState(state.database || { defaultId: 'none' })
   const [packageManager, setPackageManager] = useState(state.packageManager || 'npm')
   const [uiTheme, setUiTheme] = useState(state.uiTheme || 'cap')
+  const [projectCard, setProjectCard] = useState(() => ({
+    agent: true,
+    build: true,
+    pull: true,
+    push: true,
+    out: true,
+    preview: true,
+    ...(state.projectCard || {})
+  }))
   const rootRef = useRef(null)
   const jumping = useRef(false)
 
   useEffect(() => { api.ai.providers().then(setProviders) }, [])
   useEffect(() => { api.git.status().then(setGitStatus) }, [])
   useEffect(() => { setUiTheme(state.uiTheme || 'cap') }, [state.uiTheme])
+  useEffect(() => {
+    setProjectCard({
+      agent: true,
+      build: true,
+      pull: true,
+      push: true,
+      out: true,
+      preview: true,
+      ...(state.projectCard || {})
+    })
+  }, [state.projectCard])
 
   useEffect(() => {
     const root = rootRef.current
@@ -161,6 +190,32 @@ export default function Settings({
             </button>
           ))}
         </div>
+
+        <Field
+          label="Boutons sur les cartes projets"
+          hint="Lancer, Arrêter, Dossier et Cloner restent toujours visibles. Les idées et étapes n’apparaissent que dans le détail d’un projet."
+        >
+          <div className="chip-row settings-toggles">
+            {PROJECT_CARD_TOGGLES.map((t) => {
+              const on = projectCard[t.id] !== false
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  className={`chip link${on ? ' accent' : ''}`}
+                  aria-pressed={on}
+                  onClick={() => {
+                    const next = { ...projectCard, [t.id]: !on }
+                    setProjectCard(next)
+                    save({ projectCard: next })
+                  }}
+                >
+                  {on && <Check size={12} />} {t.label}
+                </button>
+              )
+            })}
+          </div>
+        </Field>
       </section>
 
       <section className="card settings-section" data-settings-section="atelier" id="settings-atelier">
@@ -271,6 +326,20 @@ export default function Settings({
             <RefreshCw size={16} className={testing ? 'spin' : ''} /> {testing ? 'Test…' : 'Détecter les modèles'}
           </button>
         </div>
+
+        <Field
+          label="Prompt système de l’agent"
+          hint="Ajouté à chaque conversation. Ton, règles de code, stack préférée, interdits… Laisse vide pour le comportement par défaut."
+        >
+          <textarea
+            className="textarea"
+            rows={7}
+            value={ai.systemPrompt || ''}
+            placeholder={'Ex. : Réponds en français. Préfère Vite + React. N’introduis pas de nouvelles dépendances sans le demander. Écris des composants accessibles.'}
+            onChange={(e) => setAi({ ...ai, systemPrompt: e.target.value })}
+            onBlur={() => save({ ai })}
+          />
+        </Field>
       </section>
 
       <section className="card settings-section" data-settings-section="docs" id="settings-docs">
