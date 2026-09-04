@@ -148,12 +148,36 @@ export default function Settings({
       <div className="section-head settings-head">
         <div style={{ flex: 1 }}>
           <h3>Réglages</h3>
-          <p>
-            {SETTINGS_SECTIONS.find((s) => s.id === activeSection)?.label || 'Atelier'}
-            {' · '}raccourcis dans la barre latérale
-          </p>
+          <p>{SETTINGS_SECTIONS.find((s) => s.id === activeSection)?.label || 'Atelier'}</p>
         </div>
       </div>
+
+      <nav className="settings-tabs" aria-label="Sections réglages">
+        {SETTINGS_SECTIONS.map((s) => {
+          const Icon = s.icon
+          const on = activeSection === s.id
+          return (
+            <button
+              key={s.id}
+              type="button"
+              className={`settings-tab${on ? ' on' : ''}`}
+              aria-current={on ? 'true' : undefined}
+              onClick={() => {
+                onSectionChange?.(s.id)
+                const el = rootRef.current?.querySelector(`[data-settings-section="${s.id}"]`)
+                if (el) {
+                  jumping.current = true
+                  el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                  setTimeout(() => { jumping.current = false }, 600)
+                }
+              }}
+            >
+              <Icon size={14} strokeWidth={1.8} />
+              {s.label}
+            </button>
+          )
+        })}
+      </nav>
 
       <section className="card settings-section" data-settings-section="apparence" id="settings-apparence">
         <h4 className="card-title">Apparence</h4>

@@ -122,8 +122,7 @@ export default function Catalog({ state, refresh, toast, tab, setTab, docsStatus
         <div style={{ flex: 1 }}>
           <h3>Catalogue</h3>
           <p>
-            {tab === 'frameworks' ? 'Frameworks' : 'Librairies'}
-            {' · '}raccourcis dans la barre latérale
+            {tab === 'frameworks' ? `${state.frameworks.length} frameworks` : `${state.libraries.reduce((n, c) => n + c.items.length, 0)} librairies`}
             {tab === 'libraries' && docsStatus?.total > 0 && (
               <> · docs {docsStatus.done}/{docsStatus.total}{docsStatus.status === 'running' ? ' (fond)' : ''}</>
             )}
@@ -143,6 +142,27 @@ export default function Catalog({ state, refresh, toast, tab, setTab, docsStatus
         <CatalogSync state={state} refresh={refresh} toast={toast} />
         <button className="btn primary" onClick={() => (tab === 'frameworks' ? setEditFw(blankFw) : setEditLib({ category: state.libraries[0]?.id }))}>
           <Plus size={15} /> Ajouter
+        </button>
+      </div>
+
+      <div className="view-filters" role="tablist" aria-label="Sections catalogue">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'frameworks'}
+          className={`view-filter-chip${tab === 'frameworks' ? ' on' : ''}`}
+          onClick={() => setTab('frameworks')}
+        >
+          Frameworks <span className="muted">{state.frameworks.length}</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'libraries'}
+          className={`view-filter-chip${tab === 'libraries' ? ' on' : ''}`}
+          onClick={() => setTab('libraries')}
+        >
+          Librairies <span className="muted">{state.libraries.reduce((n, c) => n + c.items.length, 0)}</span>
         </button>
       </div>
 

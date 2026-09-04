@@ -1,19 +1,18 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { flushSync } from 'react-dom'
 import {
   Boxes, Bookmark, Layers, Settings as Cog, Sparkles, Terminal, Download,
-  Minus, Square, X, HardDrive, Github, Package, LayoutTemplate
+  Minus, Square, X, PanelLeftClose, PanelLeft
 } from 'lucide-react'
 import Projects from './Projects.jsx'
 import Catalog from './Catalog.jsx'
 import Blueprints from './Blueprints.jsx'
-import Settings, { SETTINGS_SECTIONS } from './Settings.jsx'
+import Settings from './Settings.jsx'
 import Chat from './Chat.jsx'
 import Onboarding from './Onboarding.jsx'
 import ConsolePanel from './Console.jsx'
 import AiModelPicker from './AiModelPicker.jsx'
 import { BrandLockup, BrandMark, applyUiTheme } from './Brand.jsx'
-import { THEMES, toggleTheme } from './themes.jsx'
 import { api, waitForApi } from './bridge.js'
 
 const VIEWS = {
@@ -25,19 +24,17 @@ const VIEWS = {
 const ORDER = Object.keys(VIEWS)
 const NAV_STEP = 46 // hauteur 42 + gap 4
 
-const PROJECT_SCOPES = [
-  { id: 'all', label: 'Tous', icon: Boxes },
-  { id: 'local', label: 'Locaux', icon: HardDrive },
-  { id: 'github', label: 'GitHub', icon: Github }
-]
-
-const CATALOG_TABS = [
-  { id: 'frameworks', label: 'Frameworks', icon: LayoutTemplate },
-  { id: 'libraries', label: 'Librairies', icon: Package }
-]
-
 const reduced = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
 const isWin = () => window.pdc?.platform === 'win32'
+
+function readRailOpen() {
+  try {
+    const v = localStorage.getItem('pdc-rail-open')
+    if (v === '0' || v === 'false') return false
+    if (v === '1' || v === 'true') return true
+  } catch { /* ignore */ }
+  return false
+}
 
 function RestoreGlyph() {
   return (
@@ -97,12 +94,12 @@ export default function App() {
   const [state, setState] = useState(null)
   const [view, setView] = useState('projects')
   const [catalogTab, setCatalogTab] = useState('frameworks')
-  const [catalogCat, setCatalogCat] = useState(null)
   const [catalogJump, setCatalogJump] = useState(null)
   const [projectScope, setProjectScope] = useState('all')
   const [projectThemes, setProjectThemes] = useState([])
   const [settingsSection, setSettingsSection] = useState('apparence')
   const [settingsJump, setSettingsJump] = useState(null)
+  const [railOpen, setRailOpen] = useState(readRailOpen)
   const [aiProviders, setAiProviders] = useState({})
   const [logs, setLogs] = useState([])
   const [consoleH, setConsoleH] = useState(0)      // 0 = replié
@@ -217,35 +214,13 @@ export default function App() {
     setChatOpen(true)
   }, [])
 
-  const goSettingsSection = useCallback((sectionId) => {
-    setSettingsSection(sectionId)
-    setSettingsJump(`${sectionId}:${Date.now()}`)
-    if (view !== 'settings') go('settings')
-  }, [view, go])
-
-  const goCatalogTab = useCallback((tabId) => {
-    setCatalogTab(tabId)
-    if (tabId === 'frameworks') setCatalogCat(null)
-    if (view !== 'catalog') go('catalog')
-  }, [view, go])
-
-  const goCatalogCat = useCallback((catId) => {
-    setCatalogTab('libraries')
-    setCatalogCat(catId)
-    setCatalogJump(`${catId}:${Date.now()}`)
-    if (view !== 'catalog') go('catalog')
-  }, [view, go])
-
-  const projectCounts = useMemo(() => {
-    const projects = state?.projects || []
-    const isLocal = (p) => !p.remoteOnly && p.exists !== false
-    const isGithub = (p) => p.remoteOnly || p.repo?.provider === 'github' || /github\.com/i.test(p.repo?.url || '')
-    return {
-      all: projects.length,
-      local: projects.filter(isLocal).length,
-      github: projects.filter(isGithub).length
-    }
-  }, [state?.projects])
+  const toggleRail = useCallback(() => {
+    setRailOpen((open) => {
+      const next = !open
+      try { localStorage.setItem('pdc-rail-open', next ? '1' : '0') } catch { /* ignore */ }
+      return next
+    })
+  }, [])
 
   useEffect(() => {
     contentRef.current?.scrollTo({ top: 0 })
@@ -335,10 +310,22 @@ export default function App() {
   const showOnboarding = boot === 'ready' && !state.onboarding?.completed
 
   return (
-    <div className={`shell boot-${boot}${showOnboarding ? ' onboard-behind' : ''}`}>
-      <nav className="rail">
+    <div className={`shell${railOpen ? ' rail-open' : ' rail-slim'} boot-${boot}${showOnboarding ? ' onboard-behind' : ''}`}>
+      <nav className="rail" aria-label="Navigation principale">
         <div className="drag" />
-        <BrandLockup tagline="Atelier web" />
+        <div className="rail-brand">
+          <BrandLockup tagline={railOpen ? 'Atelier web' : ''} compact={!railOpen} />
+          <button
+            type="button"
+            className="rail-toggle no-drag"
+            onClick={toggleRail}
+            title={railOpen ? 'Réduire la barre' : 'Étendre la barre'}
+            aria-label={railOpen ? 'Réduire la barre latérale' : 'Étendre la barre latérale'}
+            aria-pressed={railOpen}
+          >
+            {railOpen ? <PanelLeftClose size={16} strokeWidth={1.8} /> : <PanelLeft size={16} strokeWidth={1.8} />}
+          </button>
+        </div>
 
         <div className="nav">
           <span className="nav-thumb" style={{ transform: `translateY(${ORDER.indexOf(view) * NAV_STEP}px)` }} />
@@ -349,119 +336,42 @@ export default function App() {
               : id === 'blueprints' ? state.blueprints.length
               : id === 'catalog' ? state.frameworks.length : null
             return (
-              <button key={id} className={`nav-item${view === id ? ' on' : ''}`} onClick={() => go(id)} aria-current={view === id}>
-                <Icon size={17} />
+              <button
+                key={id}
+                type="button"
+                className={`nav-item${view === id ? ' on' : ''}`}
+                onClick={() => go(id)}
+                aria-current={view === id}
+                title={v.label}
+              >
+                <Icon size={18} strokeWidth={1.75} />
                 <span className="nav-label">{v.label}</span>
-                {count != null && <span className="nav-count">{count}</span>}
+                {count != null && railOpen && <span className="nav-count">{count}</span>}
               </button>
             )
           })}
         </div>
 
-        {view === 'projects' && (
-          <div className="rail-shortcuts" aria-label="Filtres projets">
-            <span className="rail-shortcuts-label">Portée</span>
-            {PROJECT_SCOPES.map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                type="button"
-                className={`rail-shortcuts-item${projectScope === id ? ' on' : ''}`}
-                onClick={() => setProjectScope(id)}
-              >
-                <Icon size={14} strokeWidth={1.8} />
-                <span>{label}</span>
-                <em className="rail-shortcuts-count">{projectCounts[id] || 0}</em>
-              </button>
-            ))}
-            <span className="rail-shortcuts-label">Thèmes</span>
-            <button
-              type="button"
-              className={`rail-shortcuts-item${projectThemes.length === 0 ? ' on' : ''}`}
-              onClick={() => setProjectThemes([])}
-            >
-              <Boxes size={14} strokeWidth={1.8} />
-              <span>Tous</span>
-            </button>
-            {THEMES.map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                type="button"
-                className={`rail-shortcuts-item${projectThemes.includes(id) ? ' on' : ''}`}
-                onClick={() => setProjectThemes((cur) => toggleTheme(cur, id))}
-                aria-pressed={projectThemes.includes(id)}
-              >
-                <Icon size={14} strokeWidth={1.8} />
-                <span>{label}</span>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {view === 'catalog' && (
-          <div className="rail-shortcuts" aria-label="Catalogue">
-            <span className="rail-shortcuts-label">Type</span>
-            {CATALOG_TABS.map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                type="button"
-                className={`rail-shortcuts-item${catalogTab === id ? ' on' : ''}`}
-                onClick={() => goCatalogTab(id)}
-              >
-                <Icon size={14} strokeWidth={1.8} />
-                <span>{label}</span>
-                <em className="rail-shortcuts-count">
-                  {id === 'frameworks' ? (state.frameworks?.length || 0) : (state.libraries?.length || 0)}
-                </em>
-              </button>
-            ))}
-            {catalogTab === 'libraries' && (
-              <>
-                <span className="rail-shortcuts-label">Catégories</span>
-                {(state.libraries || []).map((c) => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    className={`rail-shortcuts-item${catalogCat === c.id ? ' on' : ''}`}
-                    onClick={() => goCatalogCat(c.id)}
-                    title={c.name}
-                  >
-                    <Package size={14} strokeWidth={1.8} />
-                    <span>{c.name}</span>
-                    <em className="rail-shortcuts-count">{c.items?.length || 0}</em>
-                  </button>
-                ))}
-              </>
-            )}
-          </div>
-        )}
-
-        {view === 'settings' && (
-          <div className="rail-shortcuts" aria-label="Sections des réglages">
-            <span className="rail-shortcuts-label">Sections</span>
-            {SETTINGS_SECTIONS.map(({ id, label, icon: Icon }) => (
-              <button
-                key={id}
-                type="button"
-                className={`rail-shortcuts-item${settingsSection === id ? ' on' : ''}`}
-                onClick={() => goSettingsSection(id)}
-              >
-                <Icon size={14} strokeWidth={1.8} />
-                <span>{label}</span>
-              </button>
-            ))}
-          </div>
-        )}
-
         <div className="rail-foot">
-          <button className={`nav-item${chatOpen ? ' on' : ''}`} onClick={() => (chatOpen ? setChatOpen(false) : openAgent({ projectId: agentProjectId || activeId }))}>
-            <Sparkles size={17} />
+          <button
+            type="button"
+            className={`nav-item${chatOpen ? ' on' : ''}`}
+            onClick={() => (chatOpen ? setChatOpen(false) : openAgent({ projectId: agentProjectId || activeId }))}
+            title="Agent"
+          >
+            <Sparkles size={18} strokeWidth={1.75} />
             <span className="nav-label">Agent</span>
             <span className="nav-count"><span className={`ai-dot${state.ai.model ? ' live' : ''}`} /></span>
           </button>
-          <button className={`nav-item${open ? ' on' : ''}`} onClick={toggleConsole}>
-            <Terminal size={17} />
+          <button
+            type="button"
+            className={`nav-item${open ? ' on' : ''}`}
+            onClick={toggleConsole}
+            title="Console"
+          >
+            <Terminal size={18} strokeWidth={1.75} />
             <span className="nav-label">Console</span>
-            <span className="nav-count">{liveCount || logs.length || ''}</span>
+            {railOpen && <span className="nav-count">{liveCount || logs.length || ''}</span>}
           </button>
         </div>
       </nav>

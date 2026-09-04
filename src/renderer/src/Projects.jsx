@@ -9,7 +9,7 @@ import { GitFields, RepoChip, CloneModal } from './GitFields.jsx'
 import { DatabasePicker } from './DatabaseFields.jsx'
 import { ProvisionToggle } from './DatabaseCloud.jsx'
 import { librariesFor, keepCompatible, filterLibraryItems, countCatalogLibraries } from './compat.js'
-import { ThemePicker, themeLabel, toggleTheme } from './themes.jsx'
+import { THEMES, ThemePicker, themeLabel, toggleTheme } from './themes.jsx'
 import { categoryLabel, isExperience } from './experienceMeta.js'
 import PushBoard from './PushBoard.jsx'
 import { ChecklistModal } from './ProjectChecklist.jsx'
@@ -199,7 +199,6 @@ export default function Projects({
             {counts.all || 'Aucun'} projet{counts.all > 1 ? 's' : ''}
             {scope === 'local' ? ' · locaux' : scope === 'github' ? ' · GitHub' : ''}
             {themeFilter.length ? ` · ${themeFilter.map(themeLabel).join(', ')}` : ''}
-            {' · '}raccourcis dans la barre latérale
           </p>
         </div>
         <SearchBox value={query} onChange={setQuery} placeholder="Filtrer" />
@@ -228,6 +227,50 @@ export default function Projects({
         <button className="btn primary" onClick={() => setCreating(true)}>
           <Plus size={15} /> Nouveau projet
         </button>
+      </div>
+
+      <div className="view-filters" role="toolbar" aria-label="Filtres projets">
+        {setScope && (
+          <Segmented
+            value={scope}
+            onChange={setScope}
+            options={[
+              { value: 'all', label: `Tous (${counts.all})` },
+              { value: 'local', label: `Locaux (${counts.local})` },
+              { value: 'github', label: `GitHub (${counts.github})` }
+            ]}
+          />
+        )}
+        {setThemeFilter && (
+          <div className="chip-row" style={{ flex: 1, minWidth: 0 }}>
+            {THEMES.map((t) => {
+              const on = themeFilter.includes(t.id)
+              const Icon = t.icon
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  className={`view-filter-chip${on ? ' on' : ''}`}
+                  aria-pressed={on}
+                  onClick={() => setThemeFilter(toggleTheme(themeFilter, t.id))}
+                  title={t.label}
+                >
+                  <Icon size={13} strokeWidth={1.8} />
+                  {t.label}
+                </button>
+              )
+            })}
+            {themeFilter.length > 0 && (
+              <button
+                type="button"
+                className="view-filter-chip"
+                onClick={() => setThemeFilter([])}
+              >
+                Effacer
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       <PushBoard

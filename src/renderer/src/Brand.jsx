@@ -9,14 +9,16 @@ export function BrandMark({ size = 'md', className = '' }) {
   )
 }
 
-export function BrandLockup({ tagline = 'Atelier web' }) {
+export function BrandLockup({ tagline = 'Atelier web', compact = false }) {
   return (
-    <div className="brand">
-      <BrandMark size="md" />
-      <div className="brand-copy">
-        <h1>PDC BUILDER</h1>
-        {tagline ? <span>{tagline}</span> : null}
-      </div>
+    <div className={`brand${compact ? ' compact' : ''}`}>
+      <BrandMark size={compact ? 'sm' : 'md'} />
+      {!compact && (
+        <div className="brand-copy">
+          <h1>PDC BUILDER</h1>
+          {tagline ? <span>{tagline}</span> : null}
+        </div>
+      )}
     </div>
   )
 }
