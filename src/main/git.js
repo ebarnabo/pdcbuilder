@@ -821,10 +821,11 @@ export async function activityCalendar(projects = [], pushLog = [], weeks = 17) 
     if (t < sinceTs || t > today) return
     let row = byDay.get(key)
     if (!row) {
-      row = { date: key, at: t, count: 0, events: [] }
+      row = { date: key, at: t, count: 0, items: [] }
       byDay.set(key, row)
     }
     row.count += 1
+    if (!Array.isArray(row.items)) row.items = []
     if (row.items.length < 12) row.items.push(event)
   }
 
