@@ -5,6 +5,7 @@ import { GitFields, GitStatus } from './GitFields.jsx'
 import { DatabasePicker } from './DatabaseFields.jsx'
 import { DatabaseAccounts } from './DatabaseCloud.jsx'
 import { PackageManagerPicker } from './PackageManagerPicker.jsx'
+import { UI_THEMES, applyUiTheme, BrandMark } from './Brand.jsx'
 import { api } from './bridge.js'
 
 export default function Settings({ state, refresh, toast, update, docsStatus }) {
@@ -18,9 +19,11 @@ export default function Settings({ state, refresh, toast, update, docsStatus }) 
   const [gitStatus, setGitStatus] = useState(null)
   const [databasePref, setDatabasePref] = useState(state.database || { defaultId: 'none' })
   const [packageManager, setPackageManager] = useState(state.packageManager || 'npm')
+  const [uiTheme, setUiTheme] = useState(state.uiTheme || 'cap')
 
   useEffect(() => { api.ai.providers().then(setProviders) }, [])
   useEffect(() => { api.git.status().then(setGitStatus) }, [])
+  useEffect(() => { setUiTheme(state.uiTheme || 'cap') }, [state.uiTheme])
 
   const save = async (fields) => { await api.state.patch(fields); refresh() }
   const saveGit = (next) => {
@@ -59,6 +62,43 @@ export default function Settings({ state, refresh, toast, update, docsStatus }) 
         <div style={{ flex: 1 }}>
           <h3>Réglages</h3>
           <p>Atelier, dépôts, comptes des bases (CLI / MCP) et moteur d’IA.</p>
+        </div>
+      </div>
+
+      <div className="card">
+        <h4 className="card-title">Apparence</h4>
+        <p className="card-desc">
+          Le thème Cap reprend le logo (navy → cyan). Atelier garde l’ambiance ambrée d’origine.
+        </p>
+        <div className="ui-theme-grid" role="radiogroup" aria-label="Thème de l’interface">
+          {UI_THEMES.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="radio"
+              aria-checked={uiTheme === t.id}
+              className={`ui-theme-pick${uiTheme === t.id ? ' on' : ''} theme-preview-${t.id}`}
+              onClick={() => {
+                setUiTheme(t.id)
+                applyUiTheme(t.id)
+                save({ uiTheme: t.id })
+                toast(`Thème ${t.label}`)
+              }}
+            >
+              <div className="ui-theme-swatches" aria-hidden>
+                {t.swatches.map((c) => (
+                  <i key={c} style={{ background: c }} />
+                ))}
+              </div>
+              <div className="ui-theme-meta">
+                {t.id === 'cap' ? <BrandMark size="sm" /> : <span className="ui-theme-dot" />}
+                <div>
+                  <strong>{t.label}</strong>
+                  <span>{t.hint}</span>
+                </div>
+              </div>
+            </button>
+          ))}
         </div>
       </div>
 

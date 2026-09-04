@@ -7,6 +7,7 @@ import { GitFields, GitStatus } from './GitFields.jsx'
 import { DatabasePicker } from './DatabaseFields.jsx'
 import { DatabaseAccounts } from './DatabaseCloud.jsx'
 import { PackageManagerPicker } from './PackageManagerPicker.jsx'
+import { BrandMark } from './Brand.jsx'
 import { api } from './bridge.js'
 
 const STEPS = [
@@ -127,9 +128,9 @@ export default function Onboarding({ state, onComplete }) {
               <div className="onboard-hero">
                 <div className="onboard-badge">
                   <span className="onboard-arc" aria-hidden />
-                  <div className="mark">PB</div>
+                  <BrandMark size="boot" />
                 </div>
-                <h2 id="onboard-title">Bienvenue dans PDC Builder</h2>
+                <h2 id="onboard-title">Bienvenue dans PDC BUILDER</h2>
                 <p className="onboard-lead">
                   Quelques réglages pour préparer l’atelier. Chaque étape est facultative — tu pourras tout modifier dans Réglages.
                 </p>

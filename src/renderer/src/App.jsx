@@ -7,6 +7,7 @@ import Blueprints from './Blueprints.jsx'
 import Settings from './Settings.jsx'
 import Chat from './Chat.jsx'
 import Onboarding from './Onboarding.jsx'
+import { BrandLockup, BrandMark, applyUiTheme } from './Brand.jsx'
 import { Chevron, Confirm } from './ui.jsx'
 import { api, waitForApi } from './bridge.js'
 
@@ -41,7 +42,7 @@ function BootVeil({ fading }) {
       <div className="boot-center">
         <div className="boot-badge">
           <span className="boot-arc" aria-hidden />
-          <div className="mark">PB</div>
+          <BrandMark size="boot" />
         </div>
         <p>Ouverture de l’atelier</p>
       </div>
@@ -102,6 +103,10 @@ export default function App() {
       setBootError(err?.message || String(err))
     })
   }, [])
+  useEffect(() => {
+    if (state?.uiTheme) applyUiTheme(state.uiTheme)
+  }, [state?.uiTheme])
+
   useEffect(() => {
     waitForApi()
       .then(() => refresh())
@@ -252,13 +257,7 @@ export default function App() {
     <div className={`shell boot-${boot}${showOnboarding ? ' onboard-behind' : ''}`}>
       <nav className="rail">
         <div className="drag" />
-        <div className="brand">
-          <div className="mark">PB</div>
-          <div>
-            <h1>PDC Builder</h1>
-            <span>Atelier web</span>
-          </div>
-        </div>
+        <BrandLockup tagline="Atelier web" />
 
         <div className="nav">
           <span className="nav-thumb" style={{ transform: `translateY(${ORDER.indexOf(view) * NAV_STEP}px)` }} />

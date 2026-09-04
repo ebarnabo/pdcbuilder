@@ -676,6 +676,8 @@ export const DEFAULTS = {
   },
   /** Historique des push depuis l’app (suivi des travaux). */
   pushLog: [],
+  /** Apparence : cap (logo navy/cyan) | atelier (chaud ambré). */
+  uiTheme: 'cap',
   database: {
     defaultId: 'none',
     autoCreate: true,
