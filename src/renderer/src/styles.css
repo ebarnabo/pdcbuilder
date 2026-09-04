@@ -1192,6 +1192,10 @@ html.lock-scroll .content { overflow: hidden; }
 }
 .line { display: flex; gap: 12px; white-space: pre-wrap; word-break: break-word; animation: line-in 0.24s var(--ease-out) both; }
 @keyframes line-in { from { opacity: 0; transform: translateX(-4px); } }
+.console-time {
+  flex: none; font-variant-numeric: tabular-nums;
+  color: var(--text-3); opacity: 0.75; min-width: 5.6em;
+}
 .line .who {
   color: var(--text-3); flex: none; width: 108px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
