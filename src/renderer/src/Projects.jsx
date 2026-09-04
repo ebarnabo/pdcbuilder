@@ -9,7 +9,7 @@ import { GitFields, RepoChip, CloneModal } from './GitFields.jsx'
 import { DatabasePicker } from './DatabaseFields.jsx'
 import { ProvisionToggle } from './DatabaseCloud.jsx'
 import { librariesFor, keepCompatible, filterLibraryItems, countCatalogLibraries } from './compat.js'
-import { THEMES, ThemePicker, themeLabel, toggleTheme } from './themes.jsx'
+import { ThemePicker, themeLabel, toggleTheme } from './themes.jsx'
 import { categoryLabel, isExperience } from './experienceMeta.js'
 import PushBoard from './PushBoard.jsx'
 import { ChecklistSnippet, ChecklistModal, checklistStats } from './ProjectChecklist.jsx'
@@ -17,9 +17,17 @@ import { StagesSnippet, StagesModal, stagesStats } from './ProjectStages.jsx'
 import ProjectDetail from './ProjectDetail.jsx'
 import { api } from './bridge.js'
 
-export default function Projects({ state, refresh, toast, focusProject }) {
+export default function Projects({
+  state,
+  refresh,
+  toast,
+  focusProject,
+  scope = 'all',
+  setScope,
+  themeFilter = [],
+  setThemeFilter
+}) {
   const [query, setQuery] = useState('')
-  const [scope, setScope] = useState('all')
   const [creating, setCreating] = useState(false)
   const [dup, setDup] = useState(null)
   const [del, setDel] = useState(null)
@@ -29,7 +37,6 @@ export default function Projects({ state, refresh, toast, focusProject }) {
   const [repo, setRepo] = useState(null)
   const [db, setDb] = useState(null)
   const [cloning, setCloning] = useState(false)
-  const [themeFilter, setThemeFilter] = useState([])
   const [themesFor, setThemesFor] = useState(null)
   const [ideasFor, setIdeasFor] = useState(null)
   const [stagesFor, setStagesFor] = useState(null)
@@ -181,7 +188,12 @@ export default function Projects({ state, refresh, toast, focusProject }) {
       <div className="section-head">
         <div style={{ flex: 1, minWidth: 200 }}>
           <h3>Projets</h3>
-          <p>{counts.all || 'Aucun'} projet{counts.all > 1 ? 's' : ''} · {shortPath(state.workspace)}</p>
+          <p>
+            {counts.all || 'Aucun'} projet{counts.all > 1 ? 's' : ''}
+            {scope === 'local' ? ' · locaux' : scope === 'github' ? ' · GitHub' : ''}
+            {themeFilter.length ? ` · ${themeFilter.map(themeLabel).join(', ')}` : ''}
+            {' · '}raccourcis dans la barre latérale
+          </p>
         </div>
         <SearchBox value={query} onChange={setQuery} placeholder="Filtrer" />
         <button className="btn" disabled={busySync} onClick={syncGithub} title="Importer les dépôts du compte GitHub connecté (gh)">
@@ -209,28 +221,6 @@ export default function Projects({ state, refresh, toast, focusProject }) {
         <button className="btn primary" onClick={() => setCreating(true)}>
           <Plus size={15} /> Nouveau projet
         </button>
-        <div className="chip-row" style={{ flexBasis: '100%' }}>
-          <Segmented
-            value={scope}
-            onChange={setScope}
-            options={[
-              { value: 'all', label: `Tous (${counts.all})` },
-              { value: 'local', label: `Locaux (${counts.local})` },
-              { value: 'github', label: `GitHub (${counts.github})` }
-            ]}
-          />
-          {THEMES.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              className={`chip link${themeFilter.includes(t.id) ? ' accent' : ''}`}
-              onClick={() => setThemeFilter((cur) => toggleTheme(cur, t.id))}
-              aria-pressed={themeFilter.includes(t.id)}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
       </div>
 
       <PushBoard

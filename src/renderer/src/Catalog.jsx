@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Plus, Trash2, Pencil, RotateCcw, Package, Terminal, BookOpen } from 'lucide-react'
-import { Modal, Field, Segmented, Chevron, SearchBox, ScoreStrip, Confirm } from './ui.jsx'
+import { Modal, Field, Chevron, SearchBox, ScoreStrip, Confirm } from './ui.jsx'
 import { CatalogSync } from './CatalogSync.jsx'
 import { api } from './bridge.js'
 const blankFw = {
@@ -10,7 +10,7 @@ const blankFw = {
   preview: 'npm run preview', outDir: 'dist'
 }
 
-export default function Catalog({ state, refresh, toast, tab, setTab, docsStatus }) {
+export default function Catalog({ state, refresh, toast, tab, setTab, docsStatus, jumpCat }) {
   const [editFw, setEditFw] = useState(null)
   const [editLib, setEditLib] = useState(null)
   const [docsIndex, setDocsIndex] = useState([])
@@ -21,6 +21,18 @@ export default function Catalog({ state, refresh, toast, tab, setTab, docsStatus
   useEffect(() => {
     api.docs.index().then((r) => setDocsIndex(r?.packages || [])).catch(() => {})
   }, [docsStatus?.done, docsStatus?.status, docsStatus?.lastRun])
+
+  useEffect(() => {
+    if (!jumpCat) return
+    const catId = String(jumpCat).split(':')[0]
+    if (!catId) return
+    setTab('libraries')
+    setOpenCats((ids) => (ids.includes(catId) ? ids : [...ids, catId]))
+    const t = window.setTimeout(() => {
+      document.getElementById(`lib-cat-${catId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 40)
+    return () => clearTimeout(t)
+  }, [jumpCat, setTab])
 
   const applyFw = async (fw) => {
     const id = fw.id || fw.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')
@@ -110,17 +122,13 @@ export default function Catalog({ state, refresh, toast, tab, setTab, docsStatus
         <div style={{ flex: 1 }}>
           <h3>Catalogue</h3>
           <p>
-            Les briques disponibles au moment de créer un projet.
+            {tab === 'frameworks' ? 'Frameworks' : 'Librairies'}
+            {' · '}raccourcis dans la barre latérale
             {tab === 'libraries' && docsStatus?.total > 0 && (
               <> · docs {docsStatus.done}/{docsStatus.total}{docsStatus.status === 'running' ? ' (fond)' : ''}</>
             )}
           </p>
         </div>
-        <Segmented
-          value={tab}
-          onChange={setTab}
-          options={[{ value: 'frameworks', label: 'Frameworks' }, { value: 'libraries', label: 'Librairies' }]}
-        />
         {tab === 'libraries' && (
           <SearchBox value={libQuery} onChange={setLibQuery} placeholder="Filtrer les paquets" />
         )}
@@ -176,7 +184,7 @@ export default function Catalog({ state, refresh, toast, tab, setTab, docsStatus
           {filteredLibs.map((c) => {
             const open = openCats.includes(c.id)
             return (
-            <div className="lib-group" key={c.id}>
+            <div className="lib-group" key={c.id} id={`lib-cat-${c.id}`}>
               <div className="lib-head">
                 <button
                   type="button"

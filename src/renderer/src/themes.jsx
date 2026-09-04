@@ -1,17 +1,21 @@
+import {
+  Store, ShoppingBag, AppWindow, Cloud, LayoutDashboard, Rocket,
+  BookOpen, Briefcase, Building2, Server, Smartphone
+} from 'lucide-react'
 import { Field } from './ui.jsx'
 
 export const THEMES = [
-  { id: 'vitrine', label: 'Site vitrine' },
-  { id: 'ecommerce', label: 'E-commerce' },
-  { id: 'application', label: 'Application' },
-  { id: 'saas', label: 'SaaS' },
-  { id: 'dashboard', label: 'Tableau de bord' },
-  { id: 'landing', label: 'Landing' },
-  { id: 'blog', label: 'Blog' },
-  { id: 'portfolio', label: 'Portfolio' },
-  { id: 'interne', label: 'Outil interne' },
-  { id: 'api', label: 'API' },
-  { id: 'mobile', label: 'Mobile' }
+  { id: 'vitrine', label: 'Site vitrine', icon: Store },
+  { id: 'ecommerce', label: 'E-commerce', icon: ShoppingBag },
+  { id: 'application', label: 'Application', icon: AppWindow },
+  { id: 'saas', label: 'SaaS', icon: Cloud },
+  { id: 'dashboard', label: 'Tableau de bord', icon: LayoutDashboard },
+  { id: 'landing', label: 'Landing', icon: Rocket },
+  { id: 'blog', label: 'Blog', icon: BookOpen },
+  { id: 'portfolio', label: 'Portfolio', icon: Briefcase },
+  { id: 'interne', label: 'Outil interne', icon: Building2 },
+  { id: 'api', label: 'API', icon: Server },
+  { id: 'mobile', label: 'Mobile', icon: Smartphone }
 ]
 
 const LABELS = Object.fromEntries(THEMES.map((t) => [t.id, t.label]))

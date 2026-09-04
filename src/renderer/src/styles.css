@@ -264,19 +264,20 @@ html[data-ui="cap"] .brand h1 {
 .rail-foot { position: relative; margin-top: auto; padding-top: 24px; display: flex; flex-direction: column; gap: 4px; flex: none; }
 .rail-foot .nav-item.on { background: var(--p2); box-shadow: var(--lift); }
 
-.rail-settings {
+.rail-shortcuts {
   position: relative; z-index: 1;
   display: flex; flex-direction: column; gap: 2px;
   margin: 8px 0 4px; padding: 10px 4px 4px;
   border-top: 1px solid var(--line);
   min-height: 0; overflow: auto; flex: 1 1 auto;
 }
-.rail-settings-label {
-  padding: 0 10px 8px;
+.rail-shortcuts-label {
+  padding: 10px 10px 6px;
   font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em;
   text-transform: uppercase; color: var(--text-3);
 }
-.rail-settings-item {
+.rail-shortcuts-label:first-child { padding-top: 0; }
+.rail-shortcuts-item {
   display: flex; align-items: center; gap: 9px;
   width: 100%; padding: 8px 10px; border-radius: 10px;
   border: 0; background: transparent; color: var(--text-2);
@@ -284,13 +285,23 @@ html[data-ui="cap"] .brand h1 {
   cursor: pointer;
   transition: color 0.15s var(--ease), background 0.15s var(--ease);
 }
-.rail-settings-item svg { flex: none; opacity: 0.85; }
-.rail-settings-item:hover { color: var(--text); background: color-mix(in srgb, var(--p2) 70%, transparent); }
-.rail-settings-item.on {
+.rail-shortcuts-item svg { flex: none; opacity: 0.85; }
+.rail-shortcuts-item span {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.rail-shortcuts-count {
+  flex: none; font-style: normal;
+  font-size: 11px; font-weight: 650; font-variant-numeric: tabular-nums;
+  color: var(--text-3);
+}
+.rail-shortcuts-item:hover { color: var(--text); background: color-mix(in srgb, var(--p2) 70%, transparent); }
+.rail-shortcuts-item.on {
   color: var(--accent); background: var(--accent-soft);
   font-weight: 650;
 }
-.rail-settings-item.on svg { opacity: 1; color: var(--accent); }
+.rail-shortcuts-item.on svg { opacity: 1; color: var(--accent); }
+.rail-shortcuts-item.on .rail-shortcuts-count { color: var(--accent); }
 
 .settings-layout { display: flex; flex-direction: column; gap: 14px; }
 .settings-head { margin-bottom: 0; }
@@ -891,7 +902,7 @@ html.lock-scroll .content { overflow: hidden; }
   font-weight: 400; text-transform: none; letter-spacing: 0; line-height: 1.4;
 }
 
-.lib-group { background: var(--p2); border-radius: var(--r-lg); box-shadow: var(--lift); overflow: hidden; }
+.lib-group { background: var(--p2); border-radius: var(--r-lg); box-shadow: var(--lift); overflow: hidden; scroll-margin-top: 16px; }
 .lib-head {
   display: flex; align-items: center; gap: 12px; padding: 16px 20px; width: 100%; text-align: left;
   transition: background 0.2s var(--ease);
@@ -1967,10 +1978,10 @@ html[data-ui="cap"] .btn.primary {
 @media (max-width: 1120px) {
   .shell { grid-template-columns: 76px 1fr; }
   .brand h1, .brand span, .nav-label, .nav-count,
-  .rail-settings-label, .rail-settings-item span { display: none; }
-  .nav-item, .rail-settings-item { justify-content: center; padding: 0; }
-  .rail-settings-item { width: 42px; height: 36px; margin: 0 auto; padding: 0; }
-  .rail-settings { align-items: center; padding-left: 0; padding-right: 0; }
+  .rail-shortcuts-label, .rail-shortcuts-item span, .rail-shortcuts-count { display: none; }
+  .nav-item, .rail-shortcuts-item { justify-content: center; padding: 0; }
+  .rail-shortcuts-item { width: 42px; height: 36px; margin: 0 auto; padding: 0; }
+  .rail-shortcuts { align-items: center; padding-left: 0; padding-right: 0; }
   .chat { width: 380px; }
   .content.with-chat { padding-right: calc(380px + 16px); }
   .content { padding-left: 20px; padding-right: 20px; }
