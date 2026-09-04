@@ -450,6 +450,7 @@ function ProjectCard({ project: p, framework: fw, build, index, onOpen, onMenu, 
     : p.status === 'running' ? 'Serveur actif'
     : p.status === 'starting' ? 'Démarrage'
     : p.status === 'error' ? 'Dernière opération en échec'
+    : needsPush ? 'Brouillon local · pas encore sur GitHub'
     : p.lastBuild ? `Build ${ago(p.lastBuild)}`
     : 'Prêt'
 
@@ -465,11 +466,11 @@ function ProjectCard({ project: p, framework: fw, build, index, onOpen, onMenu, 
     <article
       className={`card interactive proj-card${live ? ' live' : ''}${remote ? ' remote' : ''}`}
       style={{ '--i': Math.min(index, 8) }}
-      onClick={onOpen}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen?.() } }}
-      role="button"
-      tabIndex={0}
-      aria-label={`Ouvrir ${p.name}`}
+      onClick={remote ? undefined : onOpen}
+      onKeyDown={remote ? undefined : (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen?.() } }}
+      role={remote ? undefined : 'button'}
+      tabIndex={remote ? undefined : 0}
+      aria-label={remote ? undefined : `Ouvrir ${p.name}`}
     >
       <div className="card-head">
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -503,7 +504,7 @@ function ProjectCard({ project: p, framework: fw, build, index, onOpen, onMenu, 
         {build?.exists && <span className="chip ok">build {bytes(build.size)}</span>}
         <RepoChip repo={p.repo} onOpen={(url) => api.fs.openUrl(url)} />
         {!remote && p.exists === false && <span className="chip err">dossier introuvable</span>}
-        {needsPush && <span className="chip">Sans remote</span>}
+        {needsPush && <span className="chip">Brouillon local</span>}
         {ideas.total > 0 && (
           <button type="button" className={`chip link${ideas.open ? ' accent' : ''}`} onClick={onIdeas}>
             <CheckSquare size={11} /> {ideas.done}/{ideas.total} idées
@@ -538,26 +539,35 @@ function ProjectCard({ project: p, framework: fw, build, index, onOpen, onMenu, 
 
       <div className="card-actions" onClick={stop}>
         {remote ? (
-          <>
-            <button className="btn sm primary" disabled={busy} onClick={fetchRemote}>
-              <CloudDownload size={13} /> Cloner
-            </button>
-            {p.repo?.url && (
-              <button className="btn sm ghost" onClick={() => api.fs.openUrl(p.repo.url)}>
-                <Github size={13} /> Voir
-              </button>
-            )}
-          </>
+          <button className="btn sm primary" disabled={busy} onClick={fetchRemote}>
+            <CloudDownload size={13} /> Cloner
+          </button>
         ) : live ? (
           <>
             <button className="btn sm" onClick={() => act(() => api.run.stop(p.id))}><Square size={13} /> Arrêter</button>
             {p.url && <button className="btn sm" onClick={() => api.fs.openUrl(p.url)}><Globe size={13} /> Ouvrir</button>}
+            <button
+              className="btn sm ghost"
+              onClick={() => api.fs.reveal(p.path)}
+              title={p.path}
+            >
+              <FolderOpen size={13} /> Dossier
+            </button>
           </>
         ) : (
-          <button className="btn sm primary" disabled={busy}
-            onClick={() => { focusProject(p.id); act(() => api.run.dev(p.id)) }}>
-            <Play size={13} /> Lancer
-          </button>
+          <>
+            <button className="btn sm primary" disabled={busy}
+              onClick={() => { focusProject(p.id); act(() => api.run.dev(p.id)) }}>
+              <Play size={13} /> Lancer
+            </button>
+            <button
+              className="btn sm"
+              onClick={() => api.fs.reveal(p.path)}
+              title={`Ouvrir sur l’ordinateur · ${p.path}`}
+            >
+              <FolderOpen size={13} /> Dossier
+            </button>
+          </>
         )}
         {!remote && (
           <>
@@ -611,10 +621,6 @@ function ProjectMenu({ project: p, anchor, editor, onClose, onDuplicate, onDelet
   if (remote) {
     return (
       <Menu anchor={anchor} onClose={onClose}>
-        <button onClick={() => run(() => onOpen?.(p))}><Boxes size={15} /> Voir le détail</button>
-        {p.repo?.url && (
-          <button onClick={() => run(() => api.fs.openUrl(p.repo.url))}><Github size={15} /> Ouvrir sur GitHub</button>
-        )}
         <button onClick={() => run(() => act(() => api.project.fetchRemote(p.id), 'Dépôt cloné'))}>
           <CloudDownload size={15} /> Cloner dans l’atelier
         </button>
