@@ -753,6 +753,40 @@ import '../styles/tokens.css'
         ]
       })
     ]
+  },
+  {
+    id: 'xp-medusa',
+    builtin: true,
+    kind: 'experience',
+    category: 'commerce',
+    name: 'Boutique Medusa',
+    tagline: 'E-commerce headless, admin inclus',
+    description: 'Medusa 2 : API commerce, admin React, option storefront Next. Postgres requis pour tourner.',
+    intent: 'Vendre en headless sans lock-in SaaS opaque.',
+    audience: 'Marchands tech, agences e-commerce, builders.',
+    promise: 'create-medusa-app non interactif, prérequis Node/Git/Postgres, .env prêt.',
+    vibe: 'Commerce moderne, modules, admin clair.',
+    frameworkId: 'medusa',
+    medusaStarter: 'storefront',
+    medusaDbMode: 'local',
+    databaseId: 'none',
+    themes: ['ecommerce', 'application'],
+    libs: [],
+    commands: [],
+    files: [
+      briefMd({
+        title: 'Boutique Medusa',
+        intent: 'Catalogue, panier, checkout via API Medusa.',
+        audience: 'Clients boutique + équipe ops via admin.',
+        promise: 'Backend + storefront Next, DATABASE_URL locale.',
+        vibe: 'Headless commerce, admin :9000/app.',
+        sections: [
+          { name: 'Backend', why: 'API + admin Medusa' },
+          { name: 'Storefront', why: 'Next.js starter' },
+          { name: 'Postgres', why: 'migrations puis npm run dev' }
+        ]
+      })
+    ]
   }
 ]
 

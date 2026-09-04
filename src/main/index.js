@@ -18,6 +18,7 @@ import * as scan from './scan.js'
 import * as payloadCms from './payload.js'
 import * as sanityCms from './sanity.js'
 import * as wordpressCms from './wordpress.js'
+import * as medusaCms from './medusa.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const isMac = platform() === 'darwin'
@@ -339,6 +340,11 @@ ipcMain.handle('wordpress:options', () => ({
   locales: wordpressCms.LOCALES,
   modes: wordpressCms.MODES
 }))
+ipcMain.handle('medusa:prereqs', async (_e, opts) => medusaCms.checkPrereqs(opts?.dbMode || 'skip'))
+ipcMain.handle('medusa:options', () => ({
+  starters: medusaCms.STARTERS,
+  dbModes: medusaCms.DB_MODES
+}))
 
 /* ─────────────────────  système de fichiers  ───────────────────── */
 
@@ -469,6 +475,7 @@ ipcMain.handle('project:create', async (_e, payload) => {
   const isPayload = payloadCms.isPayloadFramework(fw)
   const isSanity = sanityCms.isSanityFramework(fw)
   const isWordpress = wordpressCms.isWordpressFramework(fw)
+  const isMedusa = medusaCms.isMedusaFramework(fw)
 
   const payloadTemplate = isPayload ? payloadCms.normalizeTemplate(payload.payloadTemplate) : null
   const payloadDb = isPayload ? payloadCms.normalizeDb(payload.payloadDb) : null
@@ -490,6 +497,9 @@ ipcMain.handle('project:create', async (_e, payload) => {
     adminPassword: String(payload.wpAdminPassword || ''),
     adminEmail: String(payload.wpAdminEmail || 'admin@example.com')
   } : null
+  const medusaStarter = isMedusa ? medusaCms.normalizeStarter(payload.medusaStarter) : null
+  const medusaDbMode = isMedusa ? medusaCms.normalizeDbMode(payload.medusaDbMode) : null
+  const medusaDbUrl = isMedusa ? String(payload.medusaDbUrl || '').trim() : ''
 
   if (isPayload) {
     const prereqs = await payloadCms.checkPrereqs(payloadDb)
@@ -530,6 +540,26 @@ ipcMain.handle('project:create', async (_e, payload) => {
         error: `Prérequis WordPress manquants : ${prereqs.missing.join(', ')}. Installe-les depuis la fiche création, puis réessaie.`,
         prereqs
       }
+    }
+  }
+
+  if (isMedusa) {
+    const prereqs = await medusaCms.checkPrereqs(medusaDbMode)
+    if (!prereqs.ready && !payload.force) {
+      const sErr = store.read()
+      store.patch({ projects: sErr.projects.filter((p) => p.id !== id) })
+      win.webContents.send('project:changed')
+      return {
+        ok: false,
+        error: `Prérequis Medusa manquants : ${prereqs.missing.join(', ')}. Installe-les depuis la fiche création, puis réessaie.`,
+        prereqs
+      }
+    }
+    if (medusaDbMode === 'url' && !medusaDbUrl) {
+      const sErr = store.read()
+      store.patch({ projects: sErr.projects.filter((p) => p.id !== id) })
+      win.webContents.send('project:changed')
+      return { ok: false, error: 'Indique une DATABASE_URL Postgres pour Medusa.' }
     }
   }
 
@@ -576,6 +606,15 @@ ipcMain.handle('project:create', async (_e, payload) => {
       })
       res = await runner.exec(win, id, installCmd, workspace, 'install WordPress')
     }
+  } else if (isMedusa) {
+    const create = pm.adaptCommand(medusaCms.buildCreateCommand({
+      name: dirName,
+      starter: medusaStarter,
+      dbMode: medusaDbMode,
+      dbUrl: medusaDbUrl,
+      pmId
+    }), pmId)
+    res = await runner.exec(win, id, create, workspace, `création — ${fw.name}`)
   } else {
     const create = isPayload
       ? pm.adaptCommand(payloadCms.buildCreateCommand({
@@ -597,6 +636,7 @@ ipcMain.handle('project:create', async (_e, payload) => {
         path = root
         patchProject(id, { path: root })
       }
+      // create-medusa-app installe déjà les deps ; needsInstall évite le double install
       if (!isWordpress) res = await installProjectDeps(id, root, pmId)
     }
   }
@@ -644,6 +684,19 @@ ipcMain.handle('project:create', async (_e, payload) => {
       wpLocale,
       wpMode,
       wpDbName: wpDb.dbName,
+      databaseId: 'none'
+    })
+  } else if (res.ok && isMedusa) {
+    const fin = medusaCms.finalize(path, {
+      starter: medusaStarter,
+      dbMode: medusaDbMode,
+      dbUrl: medusaDbUrl,
+      name: dirName
+    })
+    for (const rel of fin.files || []) runner.log(win, id, `config Medusa : ${rel}`, 'ok')
+    patchProject(id, {
+      medusaStarter,
+      medusaDbMode,
       databaseId: 'none'
     })
   } else if (res.ok && project.databaseId && project.databaseId !== 'none') {
@@ -717,6 +770,7 @@ ipcMain.handle('project:repair', async (_e, id) => {
   const isPayload = payloadCms.isPayloadFramework(fw)
   const isSanity = sanityCms.isSanityFramework(fw)
   const isWordpress = wordpressCms.isWordpressFramework(fw)
+  const isMedusa = medusaCms.isMedusaFramework(fw)
   let res
   let root = p.path
 
@@ -746,6 +800,15 @@ ipcMain.handle('project:repair', async (_e, id) => {
         })
       } catch { /* ignore */ }
     }
+  } else if (isMedusa) {
+    const create = pm.adaptCommand(medusaCms.buildCreateCommand({
+      name: dirName,
+      starter: p.medusaStarter || 'backend',
+      dbMode: p.medusaDbMode || 'skip',
+      dbUrl: '',
+      pmId
+    }), pmId)
+    res = await runner.exec(win, id, create, workspace, `recréation — ${fw.name}`)
   } else {
     const create = isPayload
       ? pm.adaptCommand(payloadCms.buildCreateCommand({
@@ -791,6 +854,13 @@ ipcMain.handle('project:repair', async (_e, id) => {
       mode: p.wpMode || 'download',
       name: dirName,
       dbName: p.wpDbName || 'wordpress'
+    })
+  }
+  if (res.ok && isMedusa) {
+    medusaCms.finalize(root, {
+      starter: p.medusaStarter || 'backend',
+      dbMode: p.medusaDbMode || 'skip',
+      name: dirName
     })
   }
 

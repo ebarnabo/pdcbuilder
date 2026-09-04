@@ -11,7 +11,8 @@ const FAMILY_BY_ID = {
   astro: 'astro',
   payload: 'react',
   sanity: 'react',
-  wordpress: 'vanilla'
+  wordpress: 'vanilla',
+  medusa: 'react'
 }
 
 /** Catégories surtout React : on exige une preuve de compatibilité, pas « any » par défaut. */
@@ -80,6 +81,7 @@ const COMPAT_LABELS = {
   payload: 'Payload',
   sanity: 'Sanity',
   wordpress: 'WordPress',
+  medusa: 'Medusa',
   vanilla: 'Vanilla',
   astro: 'Astro'
 }

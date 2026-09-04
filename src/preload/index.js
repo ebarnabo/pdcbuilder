@@ -119,6 +119,10 @@ const api = {
     prereqs: invoke('wordpress:prereqs'),
     options: invoke('wordpress:options')
   },
+  medusa: {
+    prereqs: invoke('medusa:prereqs'),
+    options: invoke('medusa:options')
+  },
   preferences: {
     path: invoke('preferences:path'),
     open: invoke('preferences:open')

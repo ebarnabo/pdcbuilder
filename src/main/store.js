@@ -146,6 +146,21 @@ export const DEFAULT_FRAMEWORKS = [
         paid: { n: 3, note: 'Hôte + plugins premium éventuels.' },
         exit: { n: 2, note: 'Fichiers + SQL chez toi.' }
       }
+    }),
+  fw('medusa', 'Medusa', 'E-commerce', 'Commerce headless Node + Postgres + admin.',
+    'npx --yes create-medusa-app@latest {{name}} --skip-db --no-browser --use-npm',
+    {
+      family: 'react',
+      kind: 'commerce-medusa',
+      outDir: '.medusa',
+      preview: 'npm run start',
+      requires: ['node', 'git', 'postgres'],
+      scores: {
+        perf: { n: 4, note: 'API modulaire, admin React, storefront Next optionnel.' },
+        free: { n: 5, note: 'OSS. Self-host sans licence commerce.' },
+        paid: { n: 3, note: 'Tu paies Postgres + hôte (et Medusa Cloud si tu veux).' },
+        exit: { n: 2, note: 'Code et données restent chez toi.' }
+      }
     })
 ]
 

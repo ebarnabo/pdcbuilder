@@ -19,6 +19,7 @@ import ProjectPreview from './ProjectPreview.jsx'
 import PayloadSetup from './PayloadSetup.jsx'
 import SanitySetup from './SanitySetup.jsx'
 import WordpressSetup from './WordpressSetup.jsx'
+import MedusaSetup from './MedusaSetup.jsx'
 import { api } from './bridge.js'
 
 export default function Projects({
@@ -707,6 +708,10 @@ function NewProject({ state, onClose, onDone, toast }) {
   const [wpAdminEmail, setWpAdminEmail] = useState('admin@example.com')
   const [wpUrl, setWpUrl] = useState('http://localhost:8080')
   const [wpPrereqsOk, setWpPrereqsOk] = useState(true)
+  const [medusaStarter, setMedusaStarter] = useState('backend')
+  const [medusaDbMode, setMedusaDbMode] = useState('skip')
+  const [medusaDbUrl, setMedusaDbUrl] = useState('')
+  const [medusaPrereqsOk, setMedusaPrereqsOk] = useState(true)
   const [git, setGit] = useState({
     create: saved.autoCreate !== false,
     provider: saved.provider || 'github',
@@ -726,7 +731,8 @@ function NewProject({ state, onClose, onDone, toast }) {
   const isPayload = fw?.id === 'payload'
   const isSanity = fw?.id === 'sanity'
   const isWordpress = fw?.id === 'wordpress'
-  const isCms = isPayload || isSanity || isWordpress
+  const isMedusa = fw?.id === 'medusa'
+  const isCms = isPayload || isSanity || isWordpress || isMedusa
   const compatible = useMemo(() => librariesFor(state.libraries, fw), [state.libraries, fw])
   const visibleLibs = useMemo(() => filterLibraryItems(compatible, libQuery), [compatible, libQuery])
   const catalogCount = useMemo(() => countCatalogLibraries(state.libraries), [state.libraries])
@@ -744,7 +750,8 @@ function NewProject({ state, onClose, onDone, toast }) {
     if (!isPayload) setPayloadPrereqsOk(true)
     if (!isSanity) setSanityPrereqsOk(true)
     if (!isWordpress) setWpPrereqsOk(true)
-  }, [isPayload, isSanity, isWordpress])
+    if (!isMedusa) setMedusaPrereqsOk(true)
+  }, [isPayload, isSanity, isWordpress, isMedusa])
 
   useEffect(() => {
     if (slug && !wpDbName) setWpDbName(slug.replace(/-/g, '_').slice(0, 64))
@@ -766,10 +773,15 @@ function NewProject({ state, onClose, onDone, toast }) {
     if (bp.sanityDataset) setSanityDataset(bp.sanityDataset)
     if (bp.wpLocale) setWpLocale(bp.wpLocale)
     if (bp.wpMode) setWpMode(bp.wpMode)
+    if (bp.medusaStarter) setMedusaStarter(bp.medusaStarter)
+    if (bp.medusaDbMode) setMedusaDbMode(bp.medusaDbMode)
   }
 
   const selectedBp = state.blueprints.find((b) => b.id === blueprintId)
-  const cmsPrereqsOk = (!isPayload || payloadPrereqsOk) && (!isSanity || sanityPrereqsOk) && (!isWordpress || wpPrereqsOk)
+  const cmsPrereqsOk = (!isPayload || payloadPrereqsOk)
+    && (!isSanity || sanityPrereqsOk)
+    && (!isWordpress || wpPrereqsOk)
+    && (!isMedusa || medusaPrereqsOk)
   const canCreate = Boolean(slug && frameworkId && cmsPrereqsOk)
 
   return (
@@ -787,6 +799,7 @@ function NewProject({ state, onClose, onDone, toast }) {
             {isPayload && <span className="chip">{payloadTemplate} · {payloadDb}</span>}
             {isSanity && <span className="chip">{sanityTemplate} · {sanityDataset}</span>}
             {isWordpress && <span className="chip">{wpMode} · {wpLocale}</span>}
+            {isMedusa && <span className="chip">{medusaStarter} · {medusaDbMode}</span>}
             {libs.length > 0 && <span className="chip"><Package size={11} /> {libs.length}</span>}
             {isCms && !cmsPrereqsOk && <span className="chip err">Prérequis manquants</span>}
           </div>
@@ -813,6 +826,9 @@ function NewProject({ state, onClose, onDone, toast }) {
               wpAdminPassword: isWordpress ? wpAdminPassword : undefined,
               wpAdminEmail: isWordpress ? wpAdminEmail : undefined,
               wpUrl: isWordpress ? wpUrl : undefined,
+              medusaStarter: isMedusa ? medusaStarter : undefined,
+              medusaDbMode: isMedusa ? medusaDbMode : undefined,
+              medusaDbUrl: isMedusa ? medusaDbUrl : undefined,
               blueprintId: blueprintId || null,
               workspace,
               themes,
@@ -939,6 +955,17 @@ function NewProject({ state, onClose, onDone, toast }) {
             onUrl={setWpUrl}
             toast={toast}
             onReadyChange={setWpPrereqsOk}
+          />
+        ) : isMedusa ? (
+          <MedusaSetup
+            starter={medusaStarter}
+            onStarter={setMedusaStarter}
+            dbMode={medusaDbMode}
+            onDbMode={setMedusaDbMode}
+            dbUrl={medusaDbUrl}
+            onDbUrl={setMedusaDbUrl}
+            toast={toast}
+            onReadyChange={setMedusaPrereqsOk}
           />
         ) : (
           <>

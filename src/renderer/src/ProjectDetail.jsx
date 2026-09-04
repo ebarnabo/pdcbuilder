@@ -151,6 +151,12 @@ export default function ProjectDetail({
             {p.wpLocale && (
               <span className="chip">{p.wpLocale}</span>
             )}
+            {p.medusaStarter && (
+              <span className="chip">Medusa · {p.medusaStarter}</span>
+            )}
+            {p.medusaDbMode && (
+              <span className="chip">DB · {p.medusaDbMode}</span>
+            )}
             {p.databaseId && p.databaseId !== 'none' && (
               <span className="chip"><Database size={11} /> {p.databaseId}</span>
             )}
