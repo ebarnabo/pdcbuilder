@@ -12,7 +12,7 @@ import { ToolchainPanel } from './ToolchainPanel.jsx'
 import { UI_THEMES, applyUiTheme, BrandMark } from './Brand.jsx'
 import { api } from './bridge.js'
 
-const SECTIONS = [
+export const SETTINGS_SECTIONS = [
   { id: 'apparence', label: 'Apparence', icon: Palette },
   { id: 'atelier', label: 'Atelier', icon: Wrench },
   { id: 'sdk', label: 'SDK & outils', icon: Cpu },
@@ -24,25 +24,16 @@ const SECTIONS = [
   { id: 'app', label: 'Application', icon: Boxes }
 ]
 
-function SettingsNav({ active, onJump }) {
-  return (
-    <nav className="settings-nav" aria-label="Sections des réglages">
-      {SECTIONS.map(({ id, label, icon: Icon }) => (
-        <button
-          key={id}
-          type="button"
-          className={`settings-nav-item${active === id ? ' on' : ''}`}
-          onClick={() => onJump(id)}
-        >
-          <Icon size={14} strokeWidth={1.8} />
-          <span>{label}</span>
-        </button>
-      ))}
-    </nav>
-  )
-}
-
-export default function Settings({ state, refresh, toast, update, docsStatus }) {
+export default function Settings({
+  state,
+  refresh,
+  toast,
+  update,
+  docsStatus,
+  activeSection = 'apparence',
+  onSectionChange,
+  jumpTo
+}) {
   const [providers, setProviders] = useState({})
   const [models, setModels] = useState([])
   const [testing, setTesting] = useState(false)
@@ -54,8 +45,8 @@ export default function Settings({ state, refresh, toast, update, docsStatus }) 
   const [databasePref, setDatabasePref] = useState(state.database || { defaultId: 'none' })
   const [packageManager, setPackageManager] = useState(state.packageManager || 'npm')
   const [uiTheme, setUiTheme] = useState(state.uiTheme || 'cap')
-  const [activeSection, setActiveSection] = useState('apparence')
   const rootRef = useRef(null)
+  const jumping = useRef(false)
 
   useEffect(() => { api.ai.providers().then(setProviders) }, [])
   useEffect(() => { api.git.status().then(setGitStatus) }, [])
@@ -68,24 +59,29 @@ export default function Settings({ state, refresh, toast, update, docsStatus }) 
     if (!nodes.length) return undefined
     const io = new IntersectionObserver(
       (entries) => {
+        if (jumping.current) return
         const visible = entries
           .filter((e) => e.isIntersecting)
           .sort((a, b) => b.intersectionRatio - a.intersectionRatio)
-        if (visible[0]?.target?.dataset?.settingsSection) {
-          setActiveSection(visible[0].target.dataset.settingsSection)
-        }
+        const id = visible[0]?.target?.dataset?.settingsSection
+        if (id) onSectionChange?.(id)
       },
       { root: root.closest('.content') || null, rootMargin: '-12% 0px -55% 0px', threshold: [0.15, 0.4, 0.7] }
     )
     nodes.forEach((n) => io.observe(n))
     return () => io.disconnect()
-  }, [])
+  }, [onSectionChange])
 
-  const jump = (id) => {
-    const el = rootRef.current?.querySelector(`[data-settings-section="${id}"]`)
-    el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    setActiveSection(id)
-  }
+  useEffect(() => {
+    if (!jumpTo) return undefined
+    const el = rootRef.current?.querySelector(`[data-settings-section="${jumpTo}"]`)
+    if (!el) return undefined
+    jumping.current = true
+    onSectionChange?.(jumpTo)
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    const t = setTimeout(() => { jumping.current = false }, 600)
+    return () => clearTimeout(t)
+  }, [jumpTo, onSectionChange])
 
   const save = async (fields) => { await api.state.patch(fields); refresh() }
   const saveGit = (next) => {
@@ -123,11 +119,12 @@ export default function Settings({ state, refresh, toast, update, docsStatus }) 
       <div className="section-head settings-head">
         <div style={{ flex: 1 }}>
           <h3>Réglages</h3>
-          <p>Sections rangées — utilise les raccourcis pour aller directement au bon bloc.</p>
+          <p>
+            {SETTINGS_SECTIONS.find((s) => s.id === activeSection)?.label || 'Atelier'}
+            {' · '}raccourcis dans la barre latérale
+          </p>
         </div>
       </div>
-
-      <SettingsNav active={activeSection} onJump={jump} />
 
       <section className="card settings-section" data-settings-section="apparence" id="settings-apparence">
         <h4 className="card-title">Apparence</h4>

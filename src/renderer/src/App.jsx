@@ -4,7 +4,7 @@ import { Boxes, Bookmark, Layers, Settings as Cog, Sparkles, Terminal, Download,
 import Projects from './Projects.jsx'
 import Catalog from './Catalog.jsx'
 import Blueprints from './Blueprints.jsx'
-import Settings from './Settings.jsx'
+import Settings, { SETTINGS_SECTIONS } from './Settings.jsx'
 import Chat from './Chat.jsx'
 import Onboarding from './Onboarding.jsx'
 import ConsolePanel from './Console.jsx'
@@ -81,6 +81,8 @@ export default function App() {
   const [state, setState] = useState(null)
   const [view, setView] = useState('projects')
   const [catalogTab, setCatalogTab] = useState('frameworks')
+  const [settingsSection, setSettingsSection] = useState('apparence')
+  const [settingsJump, setSettingsJump] = useState(null)
   const [logs, setLogs] = useState([])
   const [consoleH, setConsoleH] = useState(0)      // 0 = replié
   const [chatOpen, setChatOpen] = useState(false)
@@ -166,6 +168,12 @@ export default function App() {
       document.startViewTransition(() => flushSync(() => setView(id)))
     } else setView(id)
   }, [view])
+
+  const goSettingsSection = useCallback((sectionId) => {
+    setSettingsSection(sectionId)
+    setSettingsJump(`${sectionId}:${Date.now()}`)
+    if (view !== 'settings') go('settings')
+  }, [view, go])
 
   useEffect(() => {
     contentRef.current?.scrollTo({ top: 0 })
@@ -274,6 +282,23 @@ export default function App() {
           })}
         </div>
 
+        {view === 'settings' && (
+          <div className="rail-settings" aria-label="Sections des réglages">
+            <span className="rail-settings-label">Sections</span>
+            {SETTINGS_SECTIONS.map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                type="button"
+                className={`rail-settings-item${settingsSection === id ? ' on' : ''}`}
+                onClick={() => goSettingsSection(id)}
+              >
+                <Icon size={14} strokeWidth={1.8} />
+                <span>{label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="rail-foot">
           <button className={`nav-item${chatOpen ? ' on' : ''}`} onClick={() => setChatOpen((v) => !v)}>
             <Sparkles size={17} />
@@ -340,7 +365,18 @@ export default function App() {
             )}
             {view === 'blueprints' && <Blueprints state={state} refresh={refresh} toast={notify} />}
             {view === 'catalog' && <Catalog state={state} refresh={refresh} toast={notify} tab={catalogTab} setTab={setCatalogTab} docsStatus={docsStatus} />}
-            {view === 'settings' && <Settings state={state} refresh={refresh} toast={notify} update={update} docsStatus={docsStatus} />}
+            {view === 'settings' && (
+              <Settings
+                state={state}
+                refresh={refresh}
+                toast={notify}
+                update={update}
+                docsStatus={docsStatus}
+                activeSection={settingsSection}
+                onSectionChange={setSettingsSection}
+                jumpTo={settingsJump?.split(':')[0]}
+              />
+            )}
           </div>
         </div>
 
