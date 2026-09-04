@@ -277,6 +277,124 @@ export const TOOLS = [
       mac: brewUpgrade('postgresql@16'),
       linux: null
     }
+  },
+  {
+    id: 'mysql',
+    name: 'MySQL',
+    group: 'data',
+    tag: 'Base · SQL',
+    blurb: 'Client / serveur MySQL. Requis pour WordPress en install complète.',
+    detect: 'mysql',
+    versionFlag: '--version',
+    install: {
+      win: wingetInstall('Oracle.MySQL'),
+      mac: brewInstall('mysql'),
+      linux: 'sudo apt-get install -y mysql-server'
+    },
+    uninstall: {
+      win: wingetUninstall('Oracle.MySQL'),
+      mac: brewUninstall('mysql'),
+      linux: null
+    },
+    update: {
+      win: wingetUpgrade('Oracle.MySQL'),
+      mac: brewUpgrade('mysql'),
+      linux: null
+    }
+  },
+  {
+    id: 'php',
+    name: 'PHP',
+    group: 'runtime',
+    tag: 'Runtime PHP',
+    blurb: 'Interpréteur PHP (≥ 8.1). Requis pour WordPress et le serveur intégré.',
+    detect: 'php',
+    versionFlag: '-v',
+    install: {
+      win: wingetInstall('PHP.PHP.8.3'),
+      mac: brewInstall('php'),
+      linux: 'sudo apt-get install -y php-cli php-mysql php-xml php-mbstring php-curl'
+    },
+    uninstall: {
+      win: wingetUninstall('PHP.PHP.8.3'),
+      mac: brewUninstall('php'),
+      linux: null
+    },
+    update: {
+      win: wingetUpgrade('PHP.PHP.8.3'),
+      mac: brewUpgrade('php'),
+      linux: null
+    }
+  },
+  {
+    id: 'composer',
+    name: 'Composer',
+    group: 'runtime',
+    tag: 'Paquets PHP',
+    blurb: 'Gestionnaire de dépendances PHP. Utile pour WP-CLI et plugins.',
+    detect: 'composer',
+    install: {
+      win: wingetInstall('Composer.Composer'),
+      mac: brewInstall('composer'),
+      linux: 'curl -sS https://getcomposer.org/installer | php && sudo mv composer.phar /usr/local/bin/composer'
+    },
+    uninstall: {
+      win: wingetUninstall('Composer.Composer'),
+      mac: brewUninstall('composer'),
+      linux: null
+    },
+    update: {
+      win: wingetUpgrade('Composer.Composer'),
+      mac: brewUpgrade('composer'),
+      linux: 'composer self-update'
+    }
+  },
+  {
+    id: 'wp-cli',
+    name: 'WP-CLI',
+    group: 'runtime',
+    tag: 'WordPress CLI',
+    blurb: 'Télécharge, configure et installe WordPress en ligne de commande.',
+    detect: 'wp',
+    versionFlag: 'cli version',
+    install: {
+      win: 'powershell -NoProfile -Command "New-Item -ItemType Directory -Force -Path $env:LOCALAPPDATA\\pdc-tools | Out-Null; Invoke-WebRequest -Uri https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar -OutFile $env:LOCALAPPDATA\\pdc-tools\\wp-cli.phar; Set-Content -Path $env:LOCALAPPDATA\\pdc-tools\\wp.bat -Value \'@php \"%~dp0wp-cli.phar\" %*\'; $env:Path = \"$env:LOCALAPPDATA\\pdc-tools;$env:Path\"; [Environment]::SetEnvironmentVariable(\'Path\', ([Environment]::GetEnvironmentVariable(\'Path\',\'User\') + \';\' + \"$env:LOCALAPPDATA\\pdc-tools\"), \'User\')"',
+      mac: 'curl -sS -o /usr/local/bin/wp https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar && chmod +x /usr/local/bin/wp',
+      linux: 'sudo curl -sS -o /usr/local/bin/wp https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar && sudo chmod +x /usr/local/bin/wp'
+    },
+    uninstall: {
+      win: 'powershell -NoProfile -Command "Remove-Item -Force -ErrorAction SilentlyContinue $env:LOCALAPPDATA\\pdc-tools\\wp.bat,$env:LOCALAPPDATA\\pdc-tools\\wp-cli.phar"',
+      mac: 'sudo rm -f /usr/local/bin/wp',
+      linux: 'sudo rm -f /usr/local/bin/wp'
+    },
+    update: {
+      win: null,
+      mac: 'sudo wp cli update --yes',
+      linux: 'sudo wp cli update --yes'
+    }
+  },
+  {
+    id: 'sanity',
+    name: 'Sanity CLI',
+    group: 'runtime',
+    tag: 'CMS · Sanity',
+    blurb: 'CLI Sanity (login, deploy). Le studio peut tourner via npx sans install globale.',
+    detect: 'sanity',
+    install: {
+      win: 'npm install -g sanity@latest',
+      mac: 'npm install -g sanity@latest',
+      linux: 'npm install -g sanity@latest'
+    },
+    uninstall: {
+      win: 'npm uninstall -g sanity',
+      mac: 'npm uninstall -g sanity',
+      linux: 'npm uninstall -g sanity'
+    },
+    update: {
+      win: 'npm install -g sanity@latest',
+      mac: 'npm install -g sanity@latest',
+      linux: 'npm install -g sanity@latest'
+    }
   }
 ]
 

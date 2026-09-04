@@ -297,5 +297,5 @@ Docs : https://payloadcms.com/docs
 
 export function isPayloadFramework(fw) {
   if (!fw) return false
-  return fw.id === 'payload' || fw.kind === 'cms' || /payload/i.test(fw.create || '')
+  return fw.id === 'payload' || fw.kind === 'cms-payload'
 }

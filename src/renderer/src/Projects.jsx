@@ -17,6 +17,8 @@ import { StagesModal } from './ProjectStages.jsx'
 import ProjectDetail from './ProjectDetail.jsx'
 import ProjectPreview from './ProjectPreview.jsx'
 import PayloadSetup from './PayloadSetup.jsx'
+import SanitySetup from './SanitySetup.jsx'
+import WordpressSetup from './WordpressSetup.jsx'
 import { api } from './bridge.js'
 
 export default function Projects({
@@ -690,6 +692,21 @@ function NewProject({ state, onClose, onDone, toast }) {
   const [payloadTemplate, setPayloadTemplate] = useState('blank')
   const [payloadDb, setPayloadDb] = useState('sqlite')
   const [payloadPrereqsOk, setPayloadPrereqsOk] = useState(true)
+  const [sanityTemplate, setSanityTemplate] = useState('clean')
+  const [sanityProjectId, setSanityProjectId] = useState('')
+  const [sanityDataset, setSanityDataset] = useState('production')
+  const [sanityPrereqsOk, setSanityPrereqsOk] = useState(true)
+  const [wpLocale, setWpLocale] = useState('fr_FR')
+  const [wpMode, setWpMode] = useState('download')
+  const [wpDbName, setWpDbName] = useState('')
+  const [wpDbUser, setWpDbUser] = useState('root')
+  const [wpDbPass, setWpDbPass] = useState('')
+  const [wpDbHost, setWpDbHost] = useState('127.0.0.1')
+  const [wpAdminUser, setWpAdminUser] = useState('admin')
+  const [wpAdminPassword, setWpAdminPassword] = useState('')
+  const [wpAdminEmail, setWpAdminEmail] = useState('admin@example.com')
+  const [wpUrl, setWpUrl] = useState('http://localhost:8080')
+  const [wpPrereqsOk, setWpPrereqsOk] = useState(true)
   const [git, setGit] = useState({
     create: saved.autoCreate !== false,
     provider: saved.provider || 'github',
@@ -706,7 +723,10 @@ function NewProject({ state, onClose, onDone, toast }) {
   }, [databaseId])
 
   const fw = state.frameworks.find((f) => f.id === frameworkId)
-  const isPayload = fw?.id === 'payload' || fw?.kind === 'cms'
+  const isPayload = fw?.id === 'payload'
+  const isSanity = fw?.id === 'sanity'
+  const isWordpress = fw?.id === 'wordpress'
+  const isCms = isPayload || isSanity || isWordpress
   const compatible = useMemo(() => librariesFor(state.libraries, fw), [state.libraries, fw])
   const visibleLibs = useMemo(() => filterLibraryItems(compatible, libQuery), [compatible, libQuery])
   const catalogCount = useMemo(() => countCatalogLibraries(state.libraries), [state.libraries])
@@ -722,7 +742,13 @@ function NewProject({ state, onClose, onDone, toast }) {
 
   useEffect(() => {
     if (!isPayload) setPayloadPrereqsOk(true)
-  }, [isPayload])
+    if (!isSanity) setSanityPrereqsOk(true)
+    if (!isWordpress) setWpPrereqsOk(true)
+  }, [isPayload, isSanity, isWordpress])
+
+  useEffect(() => {
+    if (slug && !wpDbName) setWpDbName(slug.replace(/-/g, '_').slice(0, 64))
+  }, [slug])
 
   const applyBlueprint = (id) => {
     setBlueprintId(id)
@@ -736,10 +762,15 @@ function NewProject({ state, onClose, onDone, toast }) {
     setThemes(bp.themes || [])
     if (bp.payloadTemplate) setPayloadTemplate(bp.payloadTemplate)
     if (bp.payloadDb) setPayloadDb(bp.payloadDb)
+    if (bp.sanityTemplate) setSanityTemplate(bp.sanityTemplate)
+    if (bp.sanityDataset) setSanityDataset(bp.sanityDataset)
+    if (bp.wpLocale) setWpLocale(bp.wpLocale)
+    if (bp.wpMode) setWpMode(bp.wpMode)
   }
 
   const selectedBp = state.blueprints.find((b) => b.id === blueprintId)
-  const canCreate = Boolean(slug && frameworkId && (!isPayload || payloadPrereqsOk))
+  const cmsPrereqsOk = (!isPayload || payloadPrereqsOk) && (!isSanity || sanityPrereqsOk) && (!isWordpress || wpPrereqsOk)
+  const canCreate = Boolean(slug && frameworkId && cmsPrereqsOk)
 
   return (
     <Modal
@@ -754,19 +785,34 @@ function NewProject({ state, onClose, onDone, toast }) {
             {themes.map((id) => <span className="chip" key={id}>{themeLabel(id)}</span>)}
             {fw && <span className="chip">{fw.name}</span>}
             {isPayload && <span className="chip">{payloadTemplate} · {payloadDb}</span>}
+            {isSanity && <span className="chip">{sanityTemplate} · {sanityDataset}</span>}
+            {isWordpress && <span className="chip">{wpMode} · {wpLocale}</span>}
             {libs.length > 0 && <span className="chip"><Package size={11} /> {libs.length}</span>}
-            {isPayload && !payloadPrereqsOk && <span className="chip err">Prérequis manquants</span>}
+            {isCms && !cmsPrereqsOk && <span className="chip err">Prérequis manquants</span>}
           </div>
           <button className="btn ghost" onClick={onClose}>Annuler</button>
           <button className="btn primary" disabled={!canCreate}
             onClick={() => onDone({
               name: name.trim(),
               frameworkId,
-              libs,
-              databaseId: isPayload ? 'none' : databaseId,
-              provision: isPayload ? false : provision,
+              libs: isWordpress ? [] : libs,
+              databaseId: isCms ? 'none' : databaseId,
+              provision: isCms ? false : provision,
               payloadTemplate: isPayload ? payloadTemplate : undefined,
               payloadDb: isPayload ? payloadDb : undefined,
+              sanityTemplate: isSanity ? sanityTemplate : undefined,
+              sanityProjectId: isSanity ? sanityProjectId : undefined,
+              sanityDataset: isSanity ? sanityDataset : undefined,
+              wpLocale: isWordpress ? wpLocale : undefined,
+              wpMode: isWordpress ? wpMode : undefined,
+              wpDbName: isWordpress ? (wpDbName || slug.replace(/-/g, '_')) : undefined,
+              wpDbUser: isWordpress ? wpDbUser : undefined,
+              wpDbPass: isWordpress ? wpDbPass : undefined,
+              wpDbHost: isWordpress ? wpDbHost : undefined,
+              wpAdminUser: isWordpress ? wpAdminUser : undefined,
+              wpAdminPassword: isWordpress ? wpAdminPassword : undefined,
+              wpAdminEmail: isWordpress ? wpAdminEmail : undefined,
+              wpUrl: isWordpress ? wpUrl : undefined,
               blueprintId: blueprintId || null,
               workspace,
               themes,
@@ -857,6 +903,42 @@ function NewProject({ state, onClose, onDone, toast }) {
             onDb={setPayloadDb}
             toast={toast}
             onReadyChange={setPayloadPrereqsOk}
+          />
+        ) : isSanity ? (
+          <SanitySetup
+            template={sanityTemplate}
+            onTemplate={setSanityTemplate}
+            projectId={sanityProjectId}
+            onProjectId={setSanityProjectId}
+            dataset={sanityDataset}
+            onDataset={setSanityDataset}
+            toast={toast}
+            onReadyChange={setSanityPrereqsOk}
+          />
+        ) : isWordpress ? (
+          <WordpressSetup
+            locale={wpLocale}
+            onLocale={setWpLocale}
+            mode={wpMode}
+            onMode={setWpMode}
+            dbName={wpDbName || slug.replace(/-/g, '_') || 'wordpress'}
+            onDbName={setWpDbName}
+            dbUser={wpDbUser}
+            onDbUser={setWpDbUser}
+            dbPass={wpDbPass}
+            onDbPass={setWpDbPass}
+            dbHost={wpDbHost}
+            onDbHost={setWpDbHost}
+            adminUser={wpAdminUser}
+            onAdminUser={setWpAdminUser}
+            adminPassword={wpAdminPassword}
+            onAdminPassword={setWpAdminPassword}
+            adminEmail={wpAdminEmail}
+            onAdminEmail={setWpAdminEmail}
+            url={wpUrl}
+            onUrl={setWpUrl}
+            toast={toast}
+            onReadyChange={setWpPrereqsOk}
           />
         ) : (
           <>

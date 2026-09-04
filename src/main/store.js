@@ -103,7 +103,7 @@ export const DEFAULT_FRAMEWORKS = [
     'npx --yes create-payload-app@latest -n {{name}} -t blank --db sqlite --db-accept-recommended --no-agent --no-deps --no-git --use-npm',
     {
       family: 'react',
-      kind: 'cms',
+      kind: 'cms-payload',
       outDir: '.next',
       preview: 'npm run start',
       requires: ['node', 'git'],
@@ -112,6 +112,39 @@ export const DEFAULT_FRAMEWORKS = [
         free: { n: 5, note: 'OSS MIT. Self-host sans licence.' },
         paid: { n: 3, note: 'Tu paies l’hôte + la base (SQLite local = 0).' },
         exit: { n: 2, note: 'Code et schémas restent chez toi.' }
+      }
+    }),
+  fw('sanity', 'Sanity', 'CMS', 'Studio headless temps réel (cloud content).',
+    'echo Sanity scaffold PDC',
+    {
+      family: 'react',
+      kind: 'cms-sanity',
+      outDir: 'dist',
+      preview: 'npm run start',
+      requires: ['node', 'git'],
+      scores: {
+        perf: { n: 5, note: 'CDN + GROQ. Studio React vif.' },
+        free: { n: 4, note: 'Plan free généreux ; quotas cloud.' },
+        paid: { n: 4, note: 'Growth / Enterprise selon usage.' },
+        exit: { n: 3, note: 'Export possible ; le contenu vit chez Sanity.' }
+      }
+    }),
+  fw('wordpress', 'WordPress', 'CMS', 'Classic CMS PHP. Core + WP-CLI.',
+    'wp core download --path={{name}} --locale=fr_FR --force',
+    {
+      family: 'vanilla',
+      kind: 'cms-wordpress',
+      outDir: '.',
+      install: 'echo WordPress core',
+      dev: 'php -S localhost:8080',
+      build: 'echo WordPress — pas de build npm',
+      preview: 'php -S localhost:8080',
+      requires: ['php', 'wp-cli'],
+      scores: {
+        perf: { n: 3, note: 'PHP classique. Cache / hébergeur font la diff.' },
+        free: { n: 5, note: 'GPL. Self-host partout.' },
+        paid: { n: 3, note: 'Hôte + plugins premium éventuels.' },
+        exit: { n: 2, note: 'Fichiers + SQL chez toi.' }
       }
     })
 ]

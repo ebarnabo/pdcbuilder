@@ -111,6 +111,14 @@ const api = {
     prereqs: invoke('payload:prereqs'),
     options: invoke('payload:options')
   },
+  sanity: {
+    prereqs: invoke('sanity:prereqs'),
+    options: invoke('sanity:options')
+  },
+  wordpress: {
+    prereqs: invoke('wordpress:prereqs'),
+    options: invoke('wordpress:options')
+  },
   preferences: {
     path: invoke('preferences:path'),
     open: invoke('preferences:open')

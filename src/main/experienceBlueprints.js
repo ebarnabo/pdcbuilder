@@ -685,6 +685,74 @@ import '../styles/tokens.css'
         ]
       })
     ]
+  },
+  {
+    id: 'xp-sanity-studio',
+    builtin: true,
+    kind: 'experience',
+    category: 'content',
+    name: 'Studio Sanity',
+    tagline: 'Contenu cloud, studio local',
+    description: 'Sanity Studio TypeScript avec schémas blog. Project ID à brancher sur sanity.io.',
+    intent: 'Éditer du contenu structuré en temps réel, front séparé.',
+    audience: 'Équipes contenu + dev headless.',
+    promise: 'Studio prêt, prérequis Node/Git, .env pour le projectId.',
+    vibe: 'CMS moderne, GROQ, zéro PHP.',
+    frameworkId: 'sanity',
+    sanityTemplate: 'blog',
+    sanityDataset: 'production',
+    databaseId: 'none',
+    themes: ['blog', 'application'],
+    libs: [],
+    commands: [],
+    files: [
+      briefMd({
+        title: 'Studio Sanity',
+        intent: 'Schémas clairs, studio local, contenu sur Sanity cloud.',
+        audience: 'Éditeurs via Studio, site via API.',
+        promise: 'Template blog (post + author), dataset production.',
+        vibe: 'Interface Sanity, focus contenu.',
+        sections: [
+          { name: 'Studio', why: 'npm run dev → :3333' },
+          { name: 'Schémas', why: 'post, author' },
+          { name: 'Cloud', why: 'SANITY_STUDIO_PROJECT_ID dans .env' }
+        ]
+      })
+    ]
+  },
+  {
+    id: 'xp-wordpress',
+    builtin: true,
+    kind: 'experience',
+    category: 'content',
+    name: 'WordPress',
+    tagline: 'CMS classique, core téléchargé',
+    description: 'WordPress via WP-CLI : téléchargement, wp-config auto, option install complète MySQL.',
+    intent: 'Site éditorial ou vitrine avec l’écosystème WP.',
+    audience: 'Clients habitués à /wp-admin, freelances PHP.',
+    promise: 'Prérequis PHP/WP-CLI, config auto, php -S pour prévisualiser.',
+    vibe: 'Classique, plugins, thème à choisir ensuite.',
+    frameworkId: 'wordpress',
+    wpLocale: 'fr_FR',
+    wpMode: 'download',
+    databaseId: 'none',
+    themes: ['blog', 'vitrine'],
+    libs: [],
+    commands: [],
+    files: [
+      briefMd({
+        title: 'WordPress',
+        intent: 'Core WP prêt, base MySQL à brancher ou install full.',
+        audience: 'Éditeurs wp-admin.',
+        promise: 'Téléchargement + wp-config via PDC.',
+        vibe: 'CMS historique, flexible.',
+        sections: [
+          { name: 'Core', why: 'fichiers WordPress' },
+          { name: 'Config', why: 'wp-config.php' },
+          { name: 'Local', why: 'php -S localhost:8080' }
+        ]
+      })
+    ]
   }
 ]
 

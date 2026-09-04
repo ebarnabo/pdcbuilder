@@ -139,6 +139,18 @@ export default function ProjectDetail({
             {p.payloadDb && (
               <span className="chip"><Database size={11} /> {p.payloadDb}</span>
             )}
+            {p.sanityTemplate && (
+              <span className="chip">Sanity · {p.sanityTemplate}</span>
+            )}
+            {p.sanityDataset && (
+              <span className="chip">{p.sanityDataset}</span>
+            )}
+            {p.wpMode && (
+              <span className="chip">WP · {p.wpMode}</span>
+            )}
+            {p.wpLocale && (
+              <span className="chip">{p.wpLocale}</span>
+            )}
             {p.databaseId && p.databaseId !== 'none' && (
               <span className="chip"><Database size={11} /> {p.databaseId}</span>
             )}

@@ -16,6 +16,8 @@ import * as pm from './pm.js'
 import * as toolchain from './toolchain.js'
 import * as scan from './scan.js'
 import * as payloadCms from './payload.js'
+import * as sanityCms from './sanity.js'
+import * as wordpressCms from './wordpress.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const isMac = platform() === 'darwin'
@@ -104,6 +106,16 @@ async function syncAllRepos({ notify = true, onlyMissing = false } = {}) {
 }
 
 async function installProjectDeps(projectId, root, pmId, label = 'dépendances') {
+  // WordPress core : package.json marqueur sans deps utiles — pas d’install npm obligatoire
+  if (wordpressCms.isWordpressRoot(root)) {
+    const pkg = join(root, 'package.json')
+    if (!existsSync(pkg)) return { ok: true }
+    try {
+      const json = JSON.parse(readFileSync(pkg, 'utf8'))
+      const deps = { ...(json.dependencies || {}), ...(json.devDependencies || {}) }
+      if (!Object.keys(deps).length) return { ok: true }
+    } catch { /* fall through */ }
+  }
   const cmd = pm.installForPath(root, pmId)
   return runner.exec(win, projectId, cmd, root, label)
 }
@@ -320,6 +332,13 @@ ipcMain.handle('payload:options', () => ({
   templates: payloadCms.TEMPLATES,
   databases: payloadCms.DATABASES
 }))
+ipcMain.handle('sanity:prereqs', async () => sanityCms.checkPrereqs())
+ipcMain.handle('sanity:options', () => ({ templates: sanityCms.TEMPLATES }))
+ipcMain.handle('wordpress:prereqs', async (_e, opts) => wordpressCms.checkPrereqs(opts?.mode || 'download'))
+ipcMain.handle('wordpress:options', () => ({
+  locales: wordpressCms.LOCALES,
+  modes: wordpressCms.MODES
+}))
 
 /* ─────────────────────  système de fichiers  ───────────────────── */
 
@@ -448,8 +467,29 @@ ipcMain.handle('project:create', async (_e, payload) => {
 
   const pmId = s.packageManager || 'npm'
   const isPayload = payloadCms.isPayloadFramework(fw)
+  const isSanity = sanityCms.isSanityFramework(fw)
+  const isWordpress = wordpressCms.isWordpressFramework(fw)
+
   const payloadTemplate = isPayload ? payloadCms.normalizeTemplate(payload.payloadTemplate) : null
   const payloadDb = isPayload ? payloadCms.normalizeDb(payload.payloadDb) : null
+  const sanityTemplate = isSanity ? sanityCms.normalizeTemplate(payload.sanityTemplate) : null
+  const sanityProjectId = isSanity ? String(payload.sanityProjectId || '').trim() : ''
+  const sanityDataset = isSanity ? (String(payload.sanityDataset || 'production').trim() || 'production') : null
+  const wpLocale = isWordpress ? wordpressCms.normalizeLocale(payload.wpLocale) : null
+  const wpMode = isWordpress ? wordpressCms.normalizeMode(payload.wpMode) : null
+  const wpDb = isWordpress ? {
+    dbName: String(payload.wpDbName || dirName.replace(/-/g, '_').slice(0, 64) || 'wordpress').replace(/[^a-zA-Z0-9_]/g, '_') || 'wordpress',
+    dbUser: String(payload.wpDbUser || 'root'),
+    dbPass: String(payload.wpDbPass ?? ''),
+    dbHost: String(payload.wpDbHost || '127.0.0.1'),
+    dbPrefix: String(payload.wpDbPrefix || 'wp_')
+  } : null
+  const wpAdmin = isWordpress ? {
+    url: String(payload.wpUrl || 'http://localhost:8080'),
+    adminUser: String(payload.wpAdminUser || 'admin'),
+    adminPassword: String(payload.wpAdminPassword || ''),
+    adminEmail: String(payload.wpAdminEmail || 'admin@example.com')
+  } : null
 
   if (isPayload) {
     const prereqs = await payloadCms.checkPrereqs(payloadDb)
@@ -465,30 +505,103 @@ ipcMain.handle('project:create', async (_e, payload) => {
     }
   }
 
-  const create = isPayload
-    ? pm.adaptCommand(payloadCms.buildCreateCommand({
-      name: dirName,
-      template: payloadTemplate,
-      db: payloadDb,
-      pmId
-    }), pmId)
-    : pm.adaptCommand(fw.create.replaceAll('{{name}}', dirName), pmId)
-  let res = await runner.exec(win, id, create, workspace, `création — ${fw.name}`)
+  if (isSanity) {
+    const prereqs = await sanityCms.checkPrereqs()
+    if (!prereqs.ready && !payload.force) {
+      const sErr = store.read()
+      store.patch({ projects: sErr.projects.filter((p) => p.id !== id) })
+      win.webContents.send('project:changed')
+      return {
+        ok: false,
+        error: `Prérequis Sanity manquants : ${prereqs.missing.join(', ')}. Installe-les depuis la fiche création, puis réessaie.`,
+        prereqs
+      }
+    }
+  }
+
+  if (isWordpress) {
+    const prereqs = await wordpressCms.checkPrereqs(wpMode)
+    if (!prereqs.ready && !payload.force) {
+      const sErr = store.read()
+      store.patch({ projects: sErr.projects.filter((p) => p.id !== id) })
+      win.webContents.send('project:changed')
+      return {
+        ok: false,
+        error: `Prérequis WordPress manquants : ${prereqs.missing.join(', ')}. Installe-les depuis la fiche création, puis réessaie.`,
+        prereqs
+      }
+    }
+  }
+
+  let res
+  if (isSanity) {
+    try {
+      mkdirSync(path, { recursive: true })
+      const sc = sanityCms.scaffold(path, {
+        name: payload.name,
+        template: sanityTemplate,
+        projectId: sanityProjectId,
+        dataset: sanityDataset
+      })
+      for (const rel of sc.files || []) runner.log(win, id, `Sanity : ${rel}`, 'ok')
+      res = { ok: true }
+    } catch (e) {
+      res = { ok: false, error: e.message || 'Scaffold Sanity échoué.' }
+    }
+  } else if (isWordpress) {
+    mkdirSync(workspace, { recursive: true })
+    const download = wordpressCms.buildDownloadCommand({ path: dirName, locale: wpLocale })
+    res = await runner.exec(win, id, download, workspace, `téléchargement WordPress`)
+    if (res.ok) {
+      const cfg = wordpressCms.buildConfigCommand({ path: dirName, ...wpDb })
+      let cfgRes = await runner.exec(win, id, cfg, workspace, 'wp-config')
+      if (!cfgRes.ok) {
+        try {
+          wordpressCms.writeConfigFile(path, wpDb)
+          runner.log(win, id, 'wp-config.php écrit (fallback)', 'ok')
+          cfgRes = { ok: true }
+        } catch (e) {
+          cfgRes = { ok: false, error: e.message }
+        }
+      }
+      res = cfgRes
+    }
+    if (res.ok && wpMode === 'full') {
+      const dbCreate = await runner.exec(win, id, wordpressCms.buildDbCreateCommand({ path: dirName }), workspace, 'création base')
+      if (!dbCreate.ok) runner.log(win, id, 'wp db create a échoué (la base existe peut-être déjà)', 'warn')
+      const installCmd = wordpressCms.buildInstallCommand({
+        path: dirName,
+        title: payload.name,
+        ...wpAdmin
+      })
+      res = await runner.exec(win, id, installCmd, workspace, 'install WordPress')
+    }
+  } else {
+    const create = isPayload
+      ? pm.adaptCommand(payloadCms.buildCreateCommand({
+        name: dirName,
+        template: payloadTemplate,
+        db: payloadDb,
+        pmId
+      }), pmId)
+      : pm.adaptCommand(fw.create.replaceAll('{{name}}', dirName), pmId)
+    res = await runner.exec(win, id, create, workspace, `création — ${fw.name}`)
+  }
 
   if (res.ok) {
     const root = pm.resolveProjectRoot(path)
     if (!root) {
-      res = { ok: false, error: 'Le scaffold n’a pas créé de package.json. Vérifie que Node.js est installé et consulte la console.' }
+      res = { ok: false, error: 'Le scaffold n’a pas créé de projet valide. Vérifie les prérequis et consulte la console.' }
     } else {
       if (root !== path) {
         path = root
         patchProject(id, { path: root })
       }
-      res = await installProjectDeps(id, root, pmId)
+      if (!isWordpress) res = await installProjectDeps(id, root, pmId)
     }
   }
 
-  if (res.ok && project.libs.length) res = await installLibs(id, path, project.libs)
+  if (res.ok && project.libs.length && !isWordpress) res = await installLibs(id, path, project.libs)
 
   if (res.ok && isPayload) {
     const fin = payloadCms.finalize(path, {
@@ -500,6 +613,37 @@ ipcMain.handle('project:create', async (_e, payload) => {
     patchProject(id, {
       payloadTemplate,
       payloadDb,
+      databaseId: 'none'
+    })
+  } else if (res.ok && isSanity) {
+    const fin = sanityCms.finalize(path, {
+      template: sanityTemplate,
+      name: payload.name,
+      projectId: sanityProjectId,
+      dataset: sanityDataset
+    })
+    for (const rel of fin.files || []) runner.log(win, id, `config Sanity : ${rel}`, 'ok')
+    patchProject(id, {
+      sanityTemplate,
+      sanityProjectId: sanityProjectId || null,
+      sanityDataset,
+      databaseId: 'none'
+    })
+  } else if (res.ok && isWordpress) {
+    const fin = wordpressCms.finalize(path, {
+      locale: wpLocale,
+      mode: wpMode,
+      name: dirName,
+      dbName: wpDb.dbName,
+      url: wpAdmin.url,
+      adminUser: wpAdmin.adminUser,
+      adminPassword: wpAdmin.adminPassword
+    })
+    for (const rel of fin.files || []) runner.log(win, id, `config WordPress : ${rel}`, 'ok')
+    patchProject(id, {
+      wpLocale,
+      wpMode,
+      wpDbName: wpDb.dbName,
       databaseId: 'none'
     })
   } else if (res.ok && project.databaseId && project.databaseId !== 'none') {
@@ -571,34 +715,82 @@ ipcMain.handle('project:repair', async (_e, id) => {
   win.webContents.send('project:changed')
 
   const isPayload = payloadCms.isPayloadFramework(fw)
-  const create = isPayload
-    ? pm.adaptCommand(payloadCms.buildCreateCommand({
-      name: dirName,
-      template: p.payloadTemplate || 'blank',
-      db: p.payloadDb || 'sqlite',
-      pmId
-    }), pmId)
-    : pm.adaptCommand(fw.create.replaceAll('{{name}}', dirName), pmId)
-  let res = await runner.exec(win, id, create, workspace, `recréation — ${fw.name}`)
+  const isSanity = sanityCms.isSanityFramework(fw)
+  const isWordpress = wordpressCms.isWordpressFramework(fw)
+  let res
   let root = p.path
+
+  if (isSanity) {
+    try {
+      mkdirSync(p.path, { recursive: true })
+      sanityCms.scaffold(p.path, {
+        name: p.name,
+        template: p.sanityTemplate || 'clean',
+        projectId: p.sanityProjectId || '',
+        dataset: p.sanityDataset || 'production'
+      })
+      res = { ok: true }
+    } catch (e) {
+      res = { ok: false, error: e.message }
+    }
+  } else if (isWordpress) {
+    const download = wordpressCms.buildDownloadCommand({ path: dirName, locale: p.wpLocale || 'fr_FR' })
+    res = await runner.exec(win, id, download, workspace, 'recréation WordPress')
+    if (res.ok) {
+      try {
+        wordpressCms.writeConfigFile(p.path, {
+          dbName: p.wpDbName || dirName.replace(/-/g, '_'),
+          dbUser: 'root',
+          dbPass: '',
+          dbHost: '127.0.0.1'
+        })
+      } catch { /* ignore */ }
+    }
+  } else {
+    const create = isPayload
+      ? pm.adaptCommand(payloadCms.buildCreateCommand({
+        name: dirName,
+        template: p.payloadTemplate || 'blank',
+        db: p.payloadDb || 'sqlite',
+        pmId
+      }), pmId)
+      : pm.adaptCommand(fw.create.replaceAll('{{name}}', dirName), pmId)
+    res = await runner.exec(win, id, create, workspace, `recréation — ${fw.name}`)
+  }
 
   if (res.ok) {
     root = pm.resolveProjectRoot(p.path)
     if (!root) {
-      res = { ok: false, error: 'Le scaffold n’a pas créé de package.json. Vérifie que Node.js est installé.' }
+      res = { ok: false, error: 'Le scaffold n’a pas créé de projet valide.' }
     } else {
       if (root !== p.path) patchProject(id, { path: root })
-      res = await installProjectDeps(id, root, pmId)
+      if (!isWordpress) res = await installProjectDeps(id, root, pmId)
     }
   }
 
-  if (res.ok && p.libs?.length) res = await installLibs(id, root, p.libs)
+  if (res.ok && p.libs?.length && !isWordpress) res = await installLibs(id, root, p.libs)
 
   if (res.ok && isPayload) {
     payloadCms.finalize(root, {
       template: p.payloadTemplate || 'blank',
       db: p.payloadDb || 'sqlite',
       name: dirName
+    })
+  }
+  if (res.ok && isSanity) {
+    sanityCms.finalize(root, {
+      template: p.sanityTemplate || 'clean',
+      name: p.name,
+      projectId: p.sanityProjectId || '',
+      dataset: p.sanityDataset || 'production'
+    })
+  }
+  if (res.ok && isWordpress) {
+    wordpressCms.finalize(root, {
+      locale: p.wpLocale || 'fr_FR',
+      mode: p.wpMode || 'download',
+      name: dirName,
+      dbName: p.wpDbName || 'wordpress'
     })
   }
 

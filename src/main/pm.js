@@ -172,10 +172,20 @@ export function installForPath(dir, fallbackPm = 'npm') {
 export function resolveProjectRoot(dir) {
   if (!dir || !existsSync(dir)) return null
   if (existsSync(join(dir, 'package.json'))) return dir
+  if (
+    existsSync(join(dir, 'wp-includes'))
+    || existsSync(join(dir, 'wp-config.php'))
+    || existsSync(join(dir, 'wp-config-sample.php'))
+  ) return dir
   try {
     for (const name of readdirSync(dir)) {
       const child = join(dir, name)
-      if (statSync(child).isDirectory() && existsSync(join(child, 'package.json'))) return child
+      if (!statSync(child).isDirectory()) continue
+      if (existsSync(join(child, 'package.json'))) return child
+      if (
+        existsSync(join(child, 'wp-includes'))
+        || existsSync(join(child, 'wp-config-sample.php'))
+      ) return child
     }
   } catch { /* ignore */ }
   return null
