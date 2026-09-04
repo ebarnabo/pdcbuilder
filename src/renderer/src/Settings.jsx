@@ -98,7 +98,9 @@ export default function Settings({ state, refresh, toast, update, docsStatus }) 
 
       <div className="card">
         <h4 className="card-title">Application</h4>
-        <p className="card-desc">Un push sur main publie l’installeur. L’app le récupère, un clic redémarre.</p>
+        <p className="card-desc">
+          Les mises à jour se téléchargent automatiquement en arrière-plan. Quand c’est prêt, un clic redémarre sur la nouvelle version — pas besoin de re-télécharger l’installeur.
+        </p>
         <div className="row" style={{ alignItems: 'center' }}>
           <Field label="Version installée">
             <input className="input mono" readOnly value={update?.current || '…'} />
@@ -115,6 +117,11 @@ export default function Settings({ state, refresh, toast, update, docsStatus }) 
             } />
           </Field>
         </div>
+        {update?.status === 'downloading' && (
+          <div className="update-bar-track" style={{ marginTop: 8 }} aria-hidden>
+            <i className="update-bar-fill" style={{ width: `${Math.max(4, Math.round(update.percent || 0))}%` }} />
+          </div>
+        )}
         <div className="row" style={{ justifyContent: 'flex-start' }}>
           <button className="btn none" onClick={async () => {
             const r = await api.app.checkUpdate()
@@ -122,11 +129,11 @@ export default function Settings({ state, refresh, toast, update, docsStatus }) 
             else if (r?.status === 'error') toast(r.error || 'Vérification impossible', true)
             else toast('Recherche de mise à jour…')
           }}>
-            <RefreshCw size={16} /> Vérifier
+            <RefreshCw size={16} className={update?.status === 'checking' || update?.status === 'downloading' ? 'spin' : ''} /> Vérifier
           </button>
           {update?.status === 'ready' && (
             <button className="btn primary" onClick={() => api.app.installUpdate()}>
-              <Download size={16} /> Mettre à jour
+              <Download size={16} /> Installer et redémarrer
             </button>
           )}
           {state.onboarding?.completed && (

@@ -464,7 +464,7 @@ function mapGithubRepo(row) {
   }
 }
 
-export async function listRepos(provider, { org } = {}) {
+export async function listRepos(provider, { org, limit = 100 } = {}) {
   if (provider === 'origin') {
     if (isWin) {
       return {
@@ -512,8 +512,9 @@ export async function listRepos(provider, { org } = {}) {
     return { ok: false, repos: [], error: 'GitHub n’est pas connecté. Lance gh auth login, ou colle l’URL.' }
   }
   const target = org ? ` ${q(org)}` : ''
+  const cap = Math.min(Math.max(Number(limit) || 100, 1), 500)
   const listed = await run(
-    `gh repo list${target} --limit 50 --json name,nameWithOwner,description,url,isPrivate,updatedAt`,
+    `gh repo list${target} --limit ${cap} --json name,nameWithOwner,description,url,isPrivate,updatedAt`,
     homedir()
   )
   if (!listed.ok) {
@@ -522,7 +523,25 @@ export async function listRepos(provider, { org } = {}) {
   let rows = []
   try { rows = JSON.parse(listed.stdout || '[]') }
   catch { return { ok: false, repos: [], error: 'Réponse GitHub illisible.' } }
-  return { ok: true, repos: (Array.isArray(rows) ? rows : []).map(mapGithubRepo) }
+  return {
+    ok: true,
+    user: who.stdout.trim(),
+    repos: (Array.isArray(rows) ? rows : []).map(mapGithubRepo)
+  }
+}
+
+/** Indique si un projet local correspond déjà à ce dépôt distant. */
+export function projectOwnsRepo(project, remoteRepo) {
+  if (!project || !remoteRepo) return false
+  const full = String(remoteRepo.fullName || '').toLowerCase()
+  const url = normalizeRemote(remoteRepo.url || remoteRepo.remote || '')
+  const pFull = String(project.repo?.fullName || '').toLowerCase()
+  const pUrl = normalizeRemote(project.repo?.remote || project.repo?.url || '')
+  if (full && (pFull === full || pUrl.includes(full))) return true
+  if (url && pUrl && url === pUrl) return true
+  const folder = String(project.path || '').replace(/\\/g, '/').split('/').pop()?.toLowerCase()
+  if (folder && remoteRepo.name && folder === String(remoteRepo.name).toLowerCase() && project.repo) return true
+  return false
 }
 
 export function detectFramework(dir, frameworks = []) {

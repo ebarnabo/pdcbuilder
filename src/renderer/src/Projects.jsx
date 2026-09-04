@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import {
   Play, Square, Hammer, FolderOpen, Copy, Trash2, Globe, Plus, Package,
   Code2, Layers, MoreHorizontal, FolderInput, Bookmark, Boxes, ExternalLink,
-  Github, CloudUpload, CloudDownload, Link2, Database, Tag
+  Github, CloudUpload, CloudDownload, Link2, Database, Tag, Search, RefreshCw
 } from 'lucide-react'
 import { Modal, Menu, Field, SearchBox, LibraryPicker, Empty, bytes, ago, shortPath, Segmented, ScoreNotes, Confirm } from './ui.jsx'
 import { GitFields, RepoChip, CloneModal } from './GitFields.jsx'
@@ -14,6 +14,7 @@ import { api } from './bridge.js'
 
 export default function Projects({ state, refresh, toast, focusProject }) {
   const [query, setQuery] = useState('')
+  const [scope, setScope] = useState('all')
   const [creating, setCreating] = useState(false)
   const [dup, setDup] = useState(null)
   const [del, setDel] = useState(null)
@@ -25,24 +26,38 @@ export default function Projects({ state, refresh, toast, focusProject }) {
   const [cloning, setCloning] = useState(false)
   const [themeFilter, setThemeFilter] = useState([])
   const [themesFor, setThemesFor] = useState(null)
+  const [busySync, setBusySync] = useState(false)
+  const [busyScan, setBusyScan] = useState(false)
 
   const fwById = useMemo(() => Object.fromEntries(state.frameworks.map((f) => [f.id, f])), [state.frameworks])
+
+  const isLocal = (p) => !p.remoteOnly && p.exists !== false
+  const isGithub = (p) => p.remoteOnly || p.repo?.provider === 'github' || /github\.com/i.test(p.repo?.url || '')
 
   const list = useMemo(() => {
     const q = query.trim().toLowerCase()
     return state.projects.filter((p) => {
+      if (scope === 'local' && !isLocal(p)) return false
+      if (scope === 'github' && !isGithub(p)) return false
       if (themeFilter.length && !(p.themes || []).some((t) => themeFilter.includes(t))) return false
       if (!q) return true
       if (p.name.toLowerCase().includes(q)) return true
       if ((fwById[p.frameworkId]?.name || '').toLowerCase().includes(q)) return true
+      if ((p.repo?.fullName || '').toLowerCase().includes(q)) return true
       return (p.themes || []).some((id) => id.includes(q) || themeLabel(id).toLowerCase().includes(q))
     })
-  }, [state.projects, query, fwById, themeFilter])
+  }, [state.projects, query, fwById, themeFilter, scope])
+
+  const counts = useMemo(() => ({
+    all: state.projects.length,
+    local: state.projects.filter(isLocal).length,
+    github: state.projects.filter(isGithub).length
+  }), [state.projects])
 
   const buildKey = state.projects.map((p) => `${p.id}:${p.lastBuild}`).join()
   useEffect(() => {
     let alive = true
-    Promise.all(state.projects.map((p) => api.run.buildInfo(p.id).then((i) => [p.id, i])))
+    Promise.all(state.projects.filter((p) => !p.remoteOnly).map((p) => api.run.buildInfo(p.id).then((i) => [p.id, i])))
       .then((rows) => alive && setBuilds(Object.fromEntries(rows)))
     return () => { alive = false }
   }, [buildKey])
@@ -55,14 +70,51 @@ export default function Projects({ state, refresh, toast, focusProject }) {
     return r
   }
 
+  const syncGithub = async () => {
+    setBusySync(true)
+    try {
+      const r = await api.project.syncGithub({ org: state.git?.org || '' })
+      if (r?.error) toast(r.error, true)
+      else if (r.added === 0) toast(`${r.total || 0} dépôt${(r.total || 0) > 1 ? 's' : ''} GitHub — déjà tous dans la liste`)
+      else toast(`${r.added} dépôt${r.added > 1 ? 's' : ''} GitHub ajouté${r.added > 1 ? 's' : ''}`)
+      refresh()
+    } finally {
+      setBusySync(false)
+    }
+  }
+
+  const scanDisk = async () => {
+    setBusyScan(true)
+    try {
+      const extra = await api.fs.pickDir()
+      const roots = [state.workspace]
+      if (extra) roots.push(extra)
+      const r = await api.project.scan({ roots, maxDepth: 3 })
+      if (r?.error) toast(r.error, true)
+      else if (!r.added) toast(`${r.found || 0} projet${(r.found || 0) > 1 ? 's' : ''} trouvé${(r.found || 0) > 1 ? 's' : ''} — aucun nouveau`)
+      else toast(`${r.added} projet${r.added > 1 ? 's' : ''} ajouté${r.added > 1 ? 's' : ''} depuis le disque`)
+      refresh()
+    } finally {
+      setBusyScan(false)
+    }
+  }
+
   return (
     <>
       <div className="section-head">
         <div style={{ flex: 1, minWidth: 200 }}>
           <h3>Projets</h3>
-          <p>{state.projects.length || 'Aucun'} projet{state.projects.length > 1 ? 's' : ''} · {shortPath(state.workspace)}</p>
+          <p>{counts.all || 'Aucun'} projet{counts.all > 1 ? 's' : ''} · {shortPath(state.workspace)}</p>
         </div>
         <SearchBox value={query} onChange={setQuery} placeholder="Filtrer" />
+        <button className="btn" disabled={busySync} onClick={syncGithub} title="Importer les dépôts du compte GitHub connecté (gh)">
+          {busySync ? <RefreshCw size={15} className="spin" /> : <Github size={15} />}
+          GitHub
+        </button>
+        <button className="btn" disabled={busyScan} onClick={scanDisk} title="Chercher des projets (package.json) sur le disque">
+          {busyScan ? <RefreshCw size={15} className="spin" /> : <Search size={15} />}
+          Scanner
+        </button>
         <button className="btn" onClick={() => setCloning(true)}>
           <CloudDownload size={15} /> Récupérer
         </button>
@@ -80,33 +132,41 @@ export default function Projects({ state, refresh, toast, focusProject }) {
         <button className="btn primary" onClick={() => setCreating(true)}>
           <Plus size={15} /> Nouveau projet
         </button>
-        {state.projects.length > 0 && (
-          <div className="chip-row" style={{ flexBasis: '100%' }}>
-            {THEMES.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                className={`chip link${themeFilter.includes(t.id) ? ' accent' : ''}`}
-                onClick={() => setThemeFilter((cur) => toggleTheme(cur, t.id))}
-                aria-pressed={themeFilter.includes(t.id)}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-        )}
+        <div className="chip-row" style={{ flexBasis: '100%' }}>
+          <Segmented
+            value={scope}
+            onChange={setScope}
+            options={[
+              { value: 'all', label: `Tous (${counts.all})` },
+              { value: 'local', label: `Locaux (${counts.local})` },
+              { value: 'github', label: `GitHub (${counts.github})` }
+            ]}
+          />
+          {THEMES.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              className={`chip link${themeFilter.includes(t.id) ? ' accent' : ''}`}
+              onClick={() => setThemeFilter((cur) => toggleTheme(cur, t.id))}
+              aria-pressed={themeFilter.includes(t.id)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {list.length === 0 ? (
         <Empty
           icon={<Boxes size={38} color="var(--accent)" strokeWidth={1.4} />}
-          title={query || themeFilter.length ? 'Aucun projet ne correspond' : 'Rien à construire pour l’instant'}
-          text={query || themeFilter.length
+          title={query || themeFilter.length || scope !== 'all' ? 'Aucun projet ne correspond' : 'Rien à construire pour l’instant'}
+          text={query || themeFilter.length || scope !== 'all'
             ? 'Change le filtre ou les thèmes pour retrouver un projet.'
-            : 'Crée un projet, ou clone un dépôt GitHub / Cursor Origin déjà existant.'}
-          action={!(query || themeFilter.length) && (
+            : 'Crée un projet, synchronise GitHub, ou scanne ton disque.'}
+          action={!(query || themeFilter.length) && scope === 'all' && (
             <div className="row" style={{ justifyContent: 'center', flexWrap: 'wrap' }}>
               <button className="btn primary" onClick={() => setCreating(true)}><Plus size={15} /> Créer un projet</button>
+              <button className="btn" onClick={syncGithub}><Github size={15} /> Sync GitHub</button>
               <button className="btn" onClick={() => setCloning(true)}><CloudDownload size={15} /> Récupérer un dépôt</button>
             </div>
           )}
@@ -122,8 +182,10 @@ export default function Projects({ state, refresh, toast, focusProject }) {
               build={builds[p.id]}
               onMenu={(el) => setMenu(menu?.id === p.id ? null : { id: p.id, el })}
               onTheme={(id) => setThemeFilter((cur) => toggleTheme(cur, id))}
+              onPush={() => setRepo(p)}
               act={act}
               focusProject={focusProject}
+              toast={toast}
             />
           ))}
         </div>
@@ -268,12 +330,15 @@ export default function Projects({ state, refresh, toast, focusProject }) {
 
 /* ─────────────────────────  carte projet  ───────────────────────── */
 
-function ProjectCard({ project: p, framework: fw, build, index, onMenu, onTheme, act, focusProject }) {
+function ProjectCard({ project: p, framework: fw, build, index, onMenu, onTheme, onPush, act, focusProject, toast }) {
   const btnRef = useRef(null)
+  const remote = Boolean(p.remoteOnly)
   const busy = p.status === 'scaffolding' || p.status === 'cloning'
-  const live = p.status === 'running' || p.status === 'starting'
+  const live = !remote && (p.status === 'running' || p.status === 'starting')
+  const needsPush = !remote && !p.repo?.url
 
-  const statusLabel = p.status === 'cloning' ? 'Clonage du dépôt'
+  const statusLabel = remote ? 'Sur GitHub · pas encore local'
+    : p.status === 'cloning' ? 'Clonage du dépôt'
     : busy ? 'Installation en cours'
     : p.status === 'running' ? 'Serveur actif'
     : p.status === 'starting' ? 'Démarrage'
@@ -281,35 +346,54 @@ function ProjectCard({ project: p, framework: fw, build, index, onMenu, onTheme,
     : p.lastBuild ? `Build ${ago(p.lastBuild)}`
     : 'Prêt'
 
+  const fetchRemote = async () => {
+    focusProject(p.id)
+    const r = await act(() => api.project.fetchRemote(p.id))
+    if (r?.ok && !r.error) toast(r.alreadyLocal ? 'Déjà présent en local' : 'Dépôt cloné dans l’atelier')
+  }
+
   return (
-    <article className={`card interactive${live ? ' live' : ''}`} style={{ '--i': Math.min(index, 8) }}>
+    <article className={`card interactive${live ? ' live' : ''}${remote ? ' remote' : ''}`} style={{ '--i': Math.min(index, 8) }}>
       <div className="card-head">
         <div style={{ flex: 1, minWidth: 0 }}>
           <h4 className="card-title">{p.name}</h4>
-          <div className="card-path" title={p.path}>{shortPath(p.path, 40)}</div>
+          <div className="card-path" title={p.path}>
+            {remote ? (p.repo?.fullName || p.repo?.url || 'GitHub') : shortPath(p.path, 40)}
+          </div>
         </div>
-        <button ref={btnRef} className="btn icon sm ghost" aria-label="Plus d'actions" aria-haspopup="menu"
-          onClick={() => onMenu(btnRef.current)}>
-          <MoreHorizontal size={16} />
-        </button>
+        {!remote && (
+          <button ref={btnRef} className="btn icon sm ghost" aria-label="Plus d'actions" aria-haspopup="menu"
+            onClick={() => onMenu(btnRef.current)}>
+            <MoreHorizontal size={16} />
+          </button>
+        )}
+        {remote && (
+          <button ref={btnRef} className="btn icon sm ghost" aria-label="Plus d'actions" aria-haspopup="menu"
+            onClick={() => onMenu(btnRef.current)}>
+            <MoreHorizontal size={16} />
+          </button>
+        )}
       </div>
 
       <div className="chip-row">
-        <span className="chip accent">{fw?.name || 'Framework retiré'}</span>
-        {(p.themes || []).map((id) => (
+        {remote
+          ? <span className="chip"><Github size={11} /> Distant</span>
+          : <span className="chip accent">{fw?.name || 'Framework retiré'}</span>}
+        {!remote && (p.themes || []).map((id) => (
           <button type="button" className="chip link" key={id} onClick={() => onTheme(id)}>{themeLabel(id)}</button>
         ))}
-        {p.libs?.length > 0 && <span className="chip"><Package size={11} /> {p.libs.length}</span>}
-        {p.databaseId && p.databaseId !== 'none' && (
+        {!remote && p.libs?.length > 0 && <span className="chip"><Package size={11} /> {p.libs.length}</span>}
+        {!remote && p.databaseId && p.databaseId !== 'none' && (
           <span className="chip"><Database size={11} /> {p.databaseId}</span>
         )}
         {build?.exists && <span className="chip ok">build {bytes(build.size)}</span>}
         <RepoChip repo={p.repo} onOpen={(url) => api.fs.openUrl(url)} />
-        {p.exists === false && <span className="chip err">dossier introuvable</span>}
+        {!remote && p.exists === false && <span className="chip err">dossier introuvable</span>}
+        {needsPush && <span className="chip">Sans remote</span>}
       </div>
 
       <div className="status">
-        <span className={`pulse ${busy ? 'starting' : p.status === 'error' ? 'error' : p.status || ''}`} />
+        <span className={`pulse ${busy ? 'starting' : remote ? 'remote' : p.status === 'error' ? 'error' : p.status || ''}`} />
         <span>{statusLabel}</span>
         {p.status === 'running' && p.url && (
           <a href="#" onClick={(e) => { e.preventDefault(); api.fs.openUrl(p.url) }}
@@ -322,7 +406,18 @@ function ProjectCard({ project: p, framework: fw, build, index, onMenu, onTheme,
       {busy && <div className="progress"><i /></div>}
 
       <div className="card-actions">
-        {live ? (
+        {remote ? (
+          <>
+            <button className="btn sm primary" disabled={busy} onClick={fetchRemote}>
+              <CloudDownload size={13} /> Cloner
+            </button>
+            {p.repo?.url && (
+              <button className="btn sm ghost" onClick={() => api.fs.openUrl(p.repo.url)}>
+                <Github size={13} /> Voir
+              </button>
+            )}
+          </>
+        ) : live ? (
           <>
             <button className="btn sm" onClick={() => act(() => api.run.stop(p.id))}><Square size={13} /> Arrêter</button>
             {p.url && <button className="btn sm" onClick={() => api.fs.openUrl(p.url)}><Globe size={13} /> Ouvrir</button>}
@@ -333,15 +428,24 @@ function ProjectCard({ project: p, framework: fw, build, index, onMenu, onTheme,
             <Play size={13} /> Lancer
           </button>
         )}
-        <button className="btn sm" disabled={busy}
-          onClick={() => { focusProject(p.id); act(() => api.run.build(p.id), 'Build terminé') }}>
-          <Hammer size={13} /> Build
-        </button>
-        <button className="btn sm ghost" onClick={() => act(() => api.run.openBuild(p.id))}>
-          <FolderOpen size={13} /> Sortie
-        </button>
-        {build?.exists && (
-          <button className="btn sm ghost" onClick={() => act(() => api.run.openBuildFile(p.id))}>Aperçu</button>
+        {!remote && (
+          <>
+            <button className="btn sm" disabled={busy}
+              onClick={() => { focusProject(p.id); act(() => api.run.build(p.id), 'Build terminé') }}>
+              <Hammer size={13} /> Build
+            </button>
+            {needsPush && (
+              <button className="btn sm" onClick={onPush}>
+                <CloudUpload size={13} /> Push GitHub
+              </button>
+            )}
+            <button className="btn sm ghost" onClick={() => act(() => api.run.openBuild(p.id))}>
+              <FolderOpen size={13} /> Sortie
+            </button>
+            {build?.exists && (
+              <button className="btn sm ghost" onClick={() => act(() => api.run.openBuildFile(p.id))}>Aperçu</button>
+            )}
+          </>
         )}
       </div>
     </article>
@@ -351,6 +455,23 @@ function ProjectCard({ project: p, framework: fw, build, index, onMenu, onTheme,
 function ProjectMenu({ project: p, anchor, editor, onClose, onDuplicate, onDelete, onAddLibs, onRepo, onDatabase, onThemes, act }) {
   if (!p) return null
   const run = (fn) => { onClose(); fn() }
+  const remote = Boolean(p.remoteOnly)
+
+  if (remote) {
+    return (
+      <Menu anchor={anchor} onClose={onClose}>
+        {p.repo?.url && (
+          <button onClick={() => run(() => api.fs.openUrl(p.repo.url))}><Github size={15} /> Ouvrir sur GitHub</button>
+        )}
+        <button onClick={() => run(() => act(() => api.project.fetchRemote(p.id), 'Dépôt cloné'))}>
+          <CloudDownload size={15} /> Cloner dans l’atelier
+        </button>
+        <hr />
+        <button className="danger" onClick={() => run(() => onDelete(p))}><Trash2 size={15} /> Retirer de la liste</button>
+      </Menu>
+    )
+  }
+
   return (
     <Menu anchor={anchor} onClose={onClose}>
       <button onClick={() => run(() => api.editor.open({ path: p.path, editor }))}><Code2 size={15} /> Ouvrir dans l’éditeur</button>
@@ -363,7 +484,7 @@ function ProjectMenu({ project: p, anchor, editor, onClose, onDuplicate, onDelet
           <button onClick={() => run(() => act(() => api.git.push(p.id), 'Push envoyé'))}><CloudUpload size={15} /> Pousser les changements</button>
         </>
       ) : (
-        <button onClick={() => run(() => onRepo(p))}><Link2 size={15} /> Lier ou créer un dépôt</button>
+        <button onClick={() => run(() => onRepo(p))}><CloudUpload size={15} /> Pousser sur GitHub</button>
       )}
       <hr />
       <button onClick={() => run(() => onAddLibs(p))}><Package size={15} /> Ajouter des librairies</button>
@@ -619,6 +740,7 @@ function RepoModal({ project, state, onClose, act }) {
   const [url, setUrl] = useState(project.repo?.remote || '')
   const [detecting, setDetecting] = useState(false)
   const [gitStatus, setGitStatus] = useState(null)
+  const [description, setDescription] = useState(`Projet ${project.name} — PDC Builder`)
   const [git, setGit] = useState({
     provider: saved.provider || 'github',
     visibility: saved.visibility || 'private',
@@ -642,14 +764,25 @@ function RepoModal({ project, state, onClose, act }) {
     return () => { alive = false }
   }, [project.id, project.repo?.remote])
 
+  const publish = async () => {
+    onClose()
+    await act(
+      () => api.git.publish({
+        id: project.id,
+        options: { ...git, create: true, description: description.trim() || undefined }
+      }),
+      'Dépôt créé et poussé sur GitHub'
+    )
+  }
+
   return (
     <Modal
-      title={`Dépôt · ${project.name}`}
+      title={project.repo?.url ? `Dépôt · ${project.name}` : `Pousser sur GitHub · ${project.name}`}
       subtitle={project.repo?.url
         ? 'Dépôt déjà lié — tu peux le modifier ou en créer un nouveau.'
         : detecting
           ? 'Recherche d’un remote origin dans le dossier…'
-          : 'Créer un dépôt distant avec tes réglages, ou coller l’URL d’un dépôt existant.'}
+          : 'Renseigne le nom, la visibilité et l’organisation, puis valide pour créer le dépôt et pousser.'}
       onClose={onClose}
       footer={
         <>
@@ -660,10 +793,9 @@ function RepoModal({ project, state, onClose, act }) {
               await act(() => api.git.link({ id: project.id, url: url.trim() }), 'Dépôt lié')
             }}><Link2 size={15} /> Lier</button>
           ) : (
-            <button className="btn primary" disabled={!git.name.trim()} onClick={async () => {
-              onClose()
-              await act(() => api.git.publish({ id: project.id, options: git }), 'Dépôt créé')
-            }}><Github size={15} /> Créer le dépôt</button>
+            <button className="btn primary" disabled={!git.name.trim()} onClick={publish}>
+              <CloudUpload size={15} /> Créer et pousser
+            </button>
           )}
         </>
       }
@@ -673,7 +805,7 @@ function RepoModal({ project, state, onClose, act }) {
           value={mode}
           onChange={setMode}
           options={[
-            { value: 'create', label: 'Créer' },
+            { value: 'create', label: 'Créer & pousser' },
             { value: 'link', label: 'Lier un existant' }
           ]}
         />
@@ -681,8 +813,11 @@ function RepoModal({ project, state, onClose, act }) {
       {mode === 'create' ? (
         <>
           <GitFields value={git} onChange={setGit} status={gitStatus} />
-          <Field label="Nom du dépôt">
+          <Field label="Nom du dépôt" hint="Tel qu’il apparaîtra sur GitHub.">
             <input className="input mono" value={git.name} onChange={(e) => setGit({ ...git, name: e.target.value })} />
+          </Field>
+          <Field label="Description" hint="Facultatif. Visible sur la page du dépôt.">
+            <input className="input" value={description} onChange={(e) => setDescription(e.target.value)} />
           </Field>
         </>
       ) : (

@@ -13,6 +13,7 @@ import * as preferences from './preferences.js'
 import * as database from './database.js'
 import * as dbcloud from './dbcloud.js'
 import * as pm from './pm.js'
+import * as scan from './scan.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const isMac = platform() === 'darwin'
@@ -213,7 +214,12 @@ ipcMain.handle('state:get', () => {
   syncAllRepos({ notify: true, onlyMissing: true }).catch(() => {})
   return {
     ...s,
-    projects: s.projects.map((p) => ({ ...p, exists: existsSync(p.path), ...runner.devState(p.id) }))
+    projects: s.projects.map((p) => ({
+      ...p,
+      exists: p.remoteOnly ? false : existsSync(p.path),
+      remoteOnly: Boolean(p.remoteOnly),
+      ...runner.devState(p.id)
+    }))
   }
 })
 ipcMain.handle('state:patch', (_e, fields) => {
@@ -477,20 +483,170 @@ ipcMain.handle('project:repair', async (_e, id) => {
 ipcMain.handle('project:import', async (_e, { path, frameworkId, name, themes }) => {
   const s = store.read()
   if (!existsSync(path)) return { ok: false, error: 'Dossier introuvable.' }
+  if (s.projects.some((p) => p.path === path && !p.remoteOnly)) {
+    return { ok: false, error: 'Ce dossier est déjà dans la liste.' }
+  }
   const repo = await git.detectRepo(path)
+  const fwId = frameworkId || git.detectFramework(path, s.frameworks) || s.frameworks[0].id
   const project = {
     id: uid(),
     name: name || basename(path),
     path,
-    frameworkId: frameworkId || s.frameworks[0].id,
+    frameworkId: fwId,
     libs: [],
     themes: Array.isArray(themes) ? themes : [],
     createdAt: Date.now(),
     status: 'ready',
-    repo
+    repo,
+    remoteOnly: false
   }
-  store.patch({ projects: [project, ...s.projects] })
+  store.patch({ projects: [project, ...s.projects.filter((p) => !(p.remoteOnly && git.projectOwnsRepo(p, repo)))] })
+  win.webContents.send('project:changed')
   return { ok: true, id: project.id, repo }
+})
+
+ipcMain.handle('project:scan', async (_e, { roots, maxDepth } = {}) => {
+  const s = store.read()
+  const dirs = (roots?.length ? roots : [s.workspace, join(homedir(), 'Documents'), join(homedir(), 'Projects'), join(homedir(), 'Developer')])
+    .filter(Boolean)
+  const found = scan.findProjects(dirs, { maxDepth: maxDepth ?? 3 })
+  const known = new Set(s.projects.filter((p) => p.path && !p.remoteOnly).map((p) => p.path.toLowerCase()))
+  const fresh = found.filter((f) => !known.has(f.path.toLowerCase()))
+  const added = []
+  for (const item of fresh) {
+    const repo = await git.detectRepo(item.path)
+    const project = {
+      id: uid(),
+      name: item.name,
+      path: item.path,
+      frameworkId: git.detectFramework(item.path, s.frameworks) || s.frameworks[0]?.id,
+      libs: [],
+      themes: [],
+      createdAt: Date.now(),
+      status: 'ready',
+      repo,
+      remoteOnly: false
+    }
+    added.push(project)
+  }
+  if (added.length) {
+    const remoteStubs = store.read().projects.filter((p) => p.remoteOnly)
+    const keptRemote = remoteStubs.filter((p) => !added.some((a) => git.projectOwnsRepo(p, a.repo)))
+    store.patch({
+      projects: [...added, ...store.read().projects.filter((p) => !p.remoteOnly), ...keptRemote]
+    })
+    win.webContents.send('project:changed')
+  }
+  return { ok: true, found: found.length, added: added.length, projects: added.map((p) => ({ id: p.id, name: p.name, path: p.path })) }
+})
+
+ipcMain.handle('project:sync-github', async (_e, { org } = {}) => {
+  const s = store.read()
+  const listed = await git.listRepos('github', { org: org || s.git?.org || '', limit: 200 })
+  if (!listed.ok) return { ok: false, error: listed.error, added: 0, repos: [] }
+
+  const existing = store.read().projects
+  const added = []
+  for (const remote of listed.repos) {
+    if (existing.some((p) => git.projectOwnsRepo(p, remote))) continue
+    const folder = slug(remote.name || remote.fullName?.split('/').pop() || 'repo')
+    const path = join(s.workspace, folder)
+    const localExists = existsSync(join(path, 'package.json'))
+    const project = {
+      id: uid(),
+      name: remote.name || folder,
+      path,
+      frameworkId: localExists
+        ? (git.detectFramework(path, s.frameworks) || s.frameworks[0]?.id)
+        : (s.frameworks[0]?.id || 'vite-react'),
+      libs: [],
+      themes: [],
+      createdAt: Date.now(),
+      status: localExists ? 'ready' : 'remote',
+      remoteOnly: !localExists,
+      repo: {
+        provider: 'github',
+        name: remote.name,
+        fullName: remote.fullName,
+        url: remote.url,
+        remote: remote.url?.endsWith('.git') ? remote.url : `${remote.url}.git`,
+        visibility: remote.private ? 'private' : 'public'
+      }
+    }
+    if (localExists) {
+      const detected = await git.detectRepo(path)
+      if (detected) project.repo = detected
+    }
+    added.push(project)
+  }
+
+  if (added.length) {
+    store.patch({ projects: [...added, ...store.read().projects] })
+    win.webContents.send('project:changed')
+  }
+  return {
+    ok: true,
+    user: listed.user,
+    total: listed.repos.length,
+    added: added.length,
+    repos: listed.repos
+  }
+})
+
+ipcMain.handle('project:fetch-remote', async (_e, id) => {
+  const s = store.read()
+  const p = s.projects.find((x) => x.id === id)
+  if (!p) return { ok: false, error: 'Projet introuvable.' }
+  if (!p.repo?.fullName && !p.repo?.remote && !p.repo?.url) {
+    return { ok: false, error: 'Aucun dépôt distant associé.' }
+  }
+
+  const dest = p.path || join(s.workspace, slug(p.name))
+  if (existsSync(dest) && existsSync(join(dest, 'package.json'))) {
+    const repo = (await git.detectRepo(dest)) || p.repo
+    patchProject(id, { path: dest, remoteOnly: false, status: 'ready', repo })
+    win.webContents.send('project:changed')
+    return { ok: true, id, path: dest, alreadyLocal: true }
+  }
+
+  if (existsSync(dest) && readdirSync(dest).length) {
+    return { ok: false, error: `Le dossier ${basename(dest)} existe déjà et n’est pas vide.` }
+  }
+
+  mkdirSync(dirname(dest), { recursive: true })
+  patchProject(id, { status: 'cloning', path: dest, remoteOnly: true })
+  win.webContents.send('project:changed')
+
+  const payload = {
+    provider: p.repo.provider || 'github',
+    repo: p.repo.fullName,
+    url: p.repo.remote || p.repo.url,
+    folder: basename(dest),
+    workspace: dirname(dest)
+  }
+  const cloned = await git.clone(win, id, dest, payload)
+  if (!cloned.ok) {
+    patchProject(id, { status: 'remote', remoteOnly: true })
+    win.webContents.send('project:changed')
+    return cloned
+  }
+
+  const fwId = git.detectFramework(dest, s.frameworks) || p.frameworkId
+  let installError = null
+  if (existsSync(join(dest, 'package.json'))) {
+    const inst = await runner.exec(win, id, pm.installForPath(dest, s.packageManager || 'npm'), dest, 'dépendances')
+    if (!inst.ok) installError = inst.stderr || 'Installation des dépendances échouée.'
+  }
+  patchProject(id, {
+    path: dest,
+    frameworkId: fwId,
+    remoteOnly: false,
+    status: installError ? 'error' : 'ready',
+    repo: cloned.repo || p.repo
+  })
+  win.webContents.send('project:changed')
+  docs.syncAllProjects()
+  return { ok: true, id, path: dest, installError }
 })
 
 ipcMain.handle('project:duplicate', async (_e, { id, name }) => {

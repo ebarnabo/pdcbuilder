@@ -27,7 +27,10 @@ const api = {
     remove: invoke('project:delete'),
     update: invoke('project:update'),
     addLibs: invoke('project:add-libs'),
-    repair: invoke('project:repair')
+    repair: invoke('project:repair'),
+    scan: invoke('project:scan'),
+    syncGithub: invoke('project:sync-github'),
+    fetchRemote: invoke('project:fetch-remote')
   },
   run: {
     dev: invoke('run:dev'),

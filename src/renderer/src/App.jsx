@@ -304,18 +304,26 @@ export default function App() {
           <WindowControls />
         </header>
 
-        {update && (update.status === 'ready' || update.status === 'downloading') && (
-          <div className="update-bar">
-            {update.status === 'downloading' ? (
+        {update && (update.status === 'ready' || update.status === 'downloading' || update.status === 'checking') && (
+          <div className="update-bar" role="status" aria-live="polite">
+            {(update.status === 'downloading' || update.status === 'checking') && <span className="update-spin" aria-hidden />}
+            {update.status === 'checking' ? (
+              <span>Recherche d’une mise à jour…</span>
+            ) : update.status === 'downloading' ? (
               <span>Téléchargement de la {update.version || 'mise à jour'}… {Math.round(update.percent || 0)} %</span>
             ) : (
-              <span>PDC Builder {update.version} est prêt.</span>
+              <span>PDC Builder {update.version} est prêt — redémarre pour l’installer.</span>
             )}
             <div className="spacer" />
             {update.status === 'ready' && (
               <button className="btn sm primary" onClick={() => api.app.installUpdate()}>
                 <Download size={14} /> Mettre à jour
               </button>
+            )}
+            {update.status === 'downloading' && (
+              <div className="update-bar-track" aria-hidden>
+                <i className="update-bar-fill" style={{ width: `${Math.max(4, Math.round(update.percent || 0))}%` }} />
+              </div>
             )}
           </div>
         )}
