@@ -3,6 +3,9 @@ import { join } from 'path'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs'
 import { homedir } from 'os'
 import * as preferences from './preferences.js'
+import { DEFAULT_EXPERIENCE_BLUEPRINTS, mergeBlueprints } from './experienceBlueprints.js'
+
+export { DEFAULT_EXPERIENCE_BLUEPRINTS, EXPERIENCE_CATEGORIES } from './experienceBlueprints.js'
 
 const FILE = () => join(app.getPath('userData'), 'pdc-builder.json')
 
@@ -654,7 +657,7 @@ export const DEFAULTS = {
   packageManager: 'npm',
   editor: 'code',
   projects: [],
-  blueprints: [],
+  blueprints: structuredClone(DEFAULT_EXPERIENCE_BLUEPRINTS),
   frameworks: DEFAULT_FRAMEWORKS,
   libraries: DEFAULT_LIBRARIES,
   ai: {
@@ -770,7 +773,8 @@ export function read() {
           ? { ...DEFAULTS.onboarding, ...parsed.onboarding }
           : { completed: true, version: 1, skipped: [] },
         libraries: mergeLibraries(parsed.libraries, DEFAULT_LIBRARIES),
-        frameworks: mergeFrameworks(parsed.frameworks, DEFAULT_FRAMEWORKS)
+        frameworks: mergeFrameworks(parsed.frameworks, DEFAULT_FRAMEWORKS),
+        blueprints: mergeBlueprints(parsed.blueprints, DEFAULT_EXPERIENCE_BLUEPRINTS)
       }
     } else {
       cache = structuredClone(DEFAULTS)

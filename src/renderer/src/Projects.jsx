@@ -10,6 +10,7 @@ import { DatabasePicker } from './DatabaseFields.jsx'
 import { ProvisionToggle } from './DatabaseCloud.jsx'
 import { librariesFor, keepCompatible, filterLibraryItems, countCatalogLibraries } from './compat.js'
 import { THEMES, ThemePicker, themeLabel, toggleTheme } from './themes.jsx'
+import { categoryLabel, isExperience } from './experienceMeta.js'
 import { api } from './bridge.js'
 
 export default function Projects({ state, refresh, toast, focusProject }) {
@@ -561,17 +562,20 @@ function NewProject({ state, onClose, onDone }) {
     setThemes(bp.themes || [])
   }
 
+  const selectedBp = state.blueprints.find((b) => b.id === blueprintId)
+
   return (
     <Modal
       title="Nouveau projet"
-      subtitle="Choisis la stack, les librairies, puis l’emplacement. Le reste est automatique."
+      subtitle="Choisis une expérience, puis affine la stack. Les fichiers et le brief suivent."
       onClose={onClose}
       width="min(1080px, 100%)"
       footer={
         <>
           <div className="new-project-foot">
+            {selectedBp && <span className="chip accent">{selectedBp.name}</span>}
             {themes.map((id) => <span className="chip" key={id}>{themeLabel(id)}</span>)}
-            {fw && <span className="chip accent">{fw.name}</span>}
+            {fw && <span className="chip">{fw.name}</span>}
             {libs.length > 0 && <span className="chip"><Package size={11} /> {libs.length}</span>}
           </div>
           <button className="btn ghost" onClick={onClose}>Annuler</button>
@@ -585,6 +589,7 @@ function NewProject({ state, onClose, onDone }) {
               blueprintId: blueprintId || null,
               workspace,
               themes,
+              notes: selectedBp?.intent || '',
               git: { ...git, name: git.name.trim() || slug }
             })}>
             <Layers size={15} /> Créer le projet
@@ -594,18 +599,51 @@ function NewProject({ state, onClose, onDone }) {
     >
       <section className="form-section">
         <h4>Identité</h4>
-        <div className="row">
-          <Field label="Nom du projet" hint={slug ? `Dossier : ${slug}` : 'Le dossier reprend ce nom, en minuscules.'}>
-            <input className="input" autoFocus placeholder="Portfolio 2026" value={name} onChange={(e) => setName(e.target.value)} />
-          </Field>
-          <Field label="Blueprint" hint="Préremplit framework, librairies et base.">
-            <select className="select" value={blueprintId} onChange={(e) => applyBlueprint(e.target.value)}>
-              <option value="">Partir de zéro</option>
-              {state.blueprints.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
-          </Field>
-        </div>
+        <Field label="Nom du projet" hint={slug ? `Dossier : ${slug}` : 'Le dossier reprend ce nom, en minuscules.'}>
+          <input className="input" autoFocus placeholder="Portfolio 2026" value={name} onChange={(e) => setName(e.target.value)} />
+        </Field>
         <ThemePicker value={themes} onChange={setThemes} />
+      </section>
+
+      <section className="form-section">
+        <h4>Expérience de départ</h4>
+        <p className="form-section-lead">Un blueprint préremplit framework, libs, tokens et un brief EXPERIENCE.md.</p>
+        <div className="bp-pick-grid" role="radiogroup" aria-label="Blueprint">
+          <button
+            type="button"
+            role="radio"
+            aria-checked={!blueprintId}
+            className={`bp-pick${!blueprintId ? ' on' : ''}`}
+            onClick={() => { setBlueprintId(''); }}
+          >
+            <strong>Partir de zéro</strong>
+            <span>Tu choisis tout à la main.</span>
+          </button>
+          {state.blueprints.map((b) => (
+            <button
+              key={b.id}
+              type="button"
+              role="radio"
+              aria-checked={blueprintId === b.id}
+              className={`bp-pick${blueprintId === b.id ? ' on' : ''}${isExperience(b) ? ' xp' : ''}`}
+              onClick={() => applyBlueprint(b.id)}
+            >
+              <div className="bp-pick-top">
+                {isExperience(b) && <span className="chip accent" style={{ height: 18, fontSize: 10 }}>XP</span>}
+                {b.category && <span className="chip" style={{ height: 18, fontSize: 10 }}>{categoryLabel(b.category)}</span>}
+              </div>
+              <strong>{b.name}</strong>
+              <span>{b.tagline || b.description || 'Base réutilisable'}</span>
+            </button>
+          ))}
+        </div>
+        {selectedBp?.intent && (
+          <div className="bp-selected-brief">
+            <p><strong>Intention</strong> — {selectedBp.intent}</p>
+            {selectedBp.audience && <p><strong>Public</strong> — {selectedBp.audience}</p>}
+            {selectedBp.vibe && <p><strong>Ambiance</strong> — {selectedBp.vibe}</p>}
+          </div>
+        )}
       </section>
 
       <section className="form-section">

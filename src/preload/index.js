@@ -45,6 +45,7 @@ const api = {
   blueprint: {
     save: invoke('blueprint:save'),
     remove: invoke('blueprint:delete'),
+    duplicate: invoke('blueprint:duplicate'),
     fromProject: invoke('blueprint:from-project')
   },
   ai: {

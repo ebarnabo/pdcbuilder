@@ -12,7 +12,7 @@ import { api, waitForApi } from './bridge.js'
 
 const VIEWS = {
   projects: { label: 'Projets', icon: Boxes, title: 'Projets', sub: 'Créer, lancer, construire' },
-  blueprints: { label: 'Blueprints', icon: Bookmark, title: 'Blueprints', sub: 'Bases réutilisables' },
+  blueprints: { label: 'Blueprints', icon: Bookmark, title: 'Blueprints', sub: 'Expériences réutilisables' },
   catalog: { label: 'Catalogue', icon: Layers, title: 'Catalogue', sub: 'Frameworks et librairies' },
   settings: { label: 'Réglages', icon: Cog, title: 'Réglages', sub: 'Atelier, dépôts, base et IA' }
 }

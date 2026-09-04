@@ -813,8 +813,25 @@ ipcMain.handle('blueprint:save', (_e, bp) => {
 })
 ipcMain.handle('blueprint:delete', (_e, id) => {
   const s = store.read()
+  const bp = s.blueprints.find((b) => b.id === id)
+  if (bp?.builtin) return { ok: false, error: 'Les blueprints expérience intégrés ne se suppriment pas. Duplique-les pour les personnaliser.' }
   store.patch({ blueprints: s.blueprints.filter((b) => b.id !== id) })
   return { ok: true }
+})
+ipcMain.handle('blueprint:duplicate', (_e, id) => {
+  const s = store.read()
+  const src = s.blueprints.find((b) => b.id === id)
+  if (!src) return { ok: false, error: 'Blueprint introuvable.' }
+  const copy = {
+    ...structuredClone(src),
+    id: uid(),
+    name: `${src.name} (copie)`,
+    builtin: false,
+    kind: src.kind || 'custom',
+    createdAt: Date.now()
+  }
+  store.patch({ blueprints: [copy, ...s.blueprints] })
+  return { ok: true, id: copy.id }
 })
 ipcMain.handle('blueprint:from-project', (_e, { id, name }) => {
   const s = store.read()
@@ -827,6 +844,14 @@ ipcMain.handle('blueprint:from-project', (_e, { id, name }) => {
     libs: p.libs,
     databaseId: p.databaseId || 'none',
     themes: p.themes || [],
+    kind: 'custom',
+    builtin: false,
+    intent: '',
+    audience: '',
+    promise: '',
+    vibe: '',
+    tagline: '',
+    category: 'product',
     files: [],
     commands: [],
     createdAt: Date.now()
