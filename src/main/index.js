@@ -364,6 +364,7 @@ ipcMain.handle('project:create', async (_e, payload) => {
     databaseId: payload.databaseId || s.database?.defaultId || 'none',
     themes: Array.isArray(payload.themes) ? payload.themes : (bp?.themes || []),
     notes: payload.notes || '',
+    checklist: [],
     createdAt: Date.now(),
     status: 'scaffolding',
     repo: null
@@ -701,7 +702,22 @@ ipcMain.handle('project:delete', async (_e, { id, deleteFiles }) => {
 
 ipcMain.handle('project:update', (_e, { id, fields }) => {
   const s = store.read()
-  store.patch({ projects: s.projects.map((p) => (p.id === id ? { ...p, ...fields } : p)) })
+  const safe = { ...(fields || {}) }
+  if ('checklist' in safe) {
+    safe.checklist = Array.isArray(safe.checklist)
+      ? safe.checklist
+        .map((item) => ({
+          id: String(item?.id || uid()),
+          text: String(item?.text || '').trim().slice(0, 200),
+          done: Boolean(item?.done),
+          createdAt: Number(item?.createdAt) || Date.now()
+        }))
+        .filter((item) => item.text)
+        .slice(0, 80)
+      : []
+  }
+  store.patch({ projects: s.projects.map((p) => (p.id === id ? { ...p, ...safe } : p)) })
+  try { preferences.sync(store.read()) } catch { /* ignore */ }
   return { ok: true }
 })
 

@@ -159,6 +159,12 @@ export function renderMarkdown(state) {
             `- **Base** : ${dbName(p.databaseId)}`,
             `- **Thèmes** : ${listThemes(p.themes)}`,
             `- **Librairies** : ${(p.libs || []).join(', ') || 'aucune'}`,
+            ...(Array.isArray(p.checklist) && p.checklist.length
+              ? [
+                  `- **Idées** :`,
+                  ...p.checklist.slice(0, 20).map((i) => `  - [${i.done ? 'x' : ' '}] ${i.text}`)
+                ]
+              : []),
             p.repo ? `- **Dépôt** : ${typeof p.repo === 'string' ? p.repo : p.repo.url || JSON.stringify(p.repo)}` : null,
             p.status ? `- **Statut** : ${p.status}` : null,
             ''

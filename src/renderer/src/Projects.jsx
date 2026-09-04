@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import {
   Play, Square, Hammer, FolderOpen, Copy, Trash2, Globe, Plus, Package,
   Code2, Layers, MoreHorizontal, FolderInput, Bookmark, Boxes, ExternalLink,
-  Github, CloudUpload, CloudDownload, Link2, Database, Tag, Search, RefreshCw
+  Github, CheckSquare, CloudUpload, CloudDownload, Link2, Database, Tag, Search, RefreshCw
 } from 'lucide-react'
 import { Modal, Menu, Field, SearchBox, LibraryPicker, Empty, bytes, ago, shortPath, Segmented, ScoreNotes, Confirm } from './ui.jsx'
 import { GitFields, RepoChip, CloneModal } from './GitFields.jsx'
@@ -12,6 +12,7 @@ import { librariesFor, keepCompatible, filterLibraryItems, countCatalogLibraries
 import { THEMES, ThemePicker, themeLabel, toggleTheme } from './themes.jsx'
 import { categoryLabel, isExperience } from './experienceMeta.js'
 import PushBoard from './PushBoard.jsx'
+import { ChecklistSnippet, ChecklistModal, checklistStats } from './ProjectChecklist.jsx'
 import { api } from './bridge.js'
 
 export default function Projects({ state, refresh, toast, focusProject }) {
@@ -28,6 +29,7 @@ export default function Projects({ state, refresh, toast, focusProject }) {
   const [cloning, setCloning] = useState(false)
   const [themeFilter, setThemeFilter] = useState([])
   const [themesFor, setThemesFor] = useState(null)
+  const [ideasFor, setIdeasFor] = useState(null)
   const [busySync, setBusySync] = useState(false)
   const [busyScan, setBusyScan] = useState(false)
 
@@ -194,6 +196,7 @@ export default function Projects({ state, refresh, toast, focusProject }) {
               onMenu={(el) => setMenu(menu?.id === p.id ? null : { id: p.id, el })}
               onTheme={(id) => setThemeFilter((cur) => toggleTheme(cur, id))}
               onPush={() => setRepo(p)}
+              onIdeas={() => setIdeasFor(p)}
               act={act}
               focusProject={focusProject}
               toast={toast}
@@ -214,6 +217,15 @@ export default function Projects({ state, refresh, toast, focusProject }) {
           onRepo={setRepo}
           onDatabase={setDb}
           onThemes={setThemesFor}
+          onIdeas={setIdeasFor}
+          act={act}
+        />
+      )}
+
+      {ideasFor && (
+        <ChecklistModal
+          project={state.projects.find((p) => p.id === ideasFor.id) || ideasFor}
+          onClose={() => setIdeasFor(null)}
           act={act}
         />
       )}
@@ -341,12 +353,13 @@ export default function Projects({ state, refresh, toast, focusProject }) {
 
 /* ─────────────────────────  carte projet  ───────────────────────── */
 
-function ProjectCard({ project: p, framework: fw, build, index, onMenu, onTheme, onPush, act, focusProject, toast }) {
+function ProjectCard({ project: p, framework: fw, build, index, onMenu, onTheme, onPush, onIdeas, act, focusProject, toast }) {
   const btnRef = useRef(null)
   const remote = Boolean(p.remoteOnly)
   const busy = p.status === 'scaffolding' || p.status === 'cloning'
   const live = !remote && (p.status === 'running' || p.status === 'starting')
   const needsPush = !remote && !p.repo?.url
+  const ideas = checklistStats(p.checklist)
 
   const statusLabel = remote ? 'Sur GitHub · pas encore local'
     : p.status === 'cloning' ? 'Clonage du dépôt'
@@ -401,6 +414,11 @@ function ProjectCard({ project: p, framework: fw, build, index, onMenu, onTheme,
         <RepoChip repo={p.repo} onOpen={(url) => api.fs.openUrl(url)} />
         {!remote && p.exists === false && <span className="chip err">dossier introuvable</span>}
         {needsPush && <span className="chip">Sans remote</span>}
+        {ideas.total > 0 && (
+          <button type="button" className={`chip link${ideas.open ? ' accent' : ''}`} onClick={onIdeas}>
+            <CheckSquare size={11} /> {ideas.done}/{ideas.total} idées
+          </button>
+        )}
       </div>
 
       <div className="status">
@@ -413,6 +431,10 @@ function ProjectCard({ project: p, framework: fw, build, index, onMenu, onTheme,
           </a>
         )}
       </div>
+
+      {!remote && (
+        <ChecklistSnippet project={p} onOpen={onIdeas} act={act} />
+      )}
 
       {busy && <div className="progress"><i /></div>}
 
@@ -463,7 +485,7 @@ function ProjectCard({ project: p, framework: fw, build, index, onMenu, onTheme,
   )
 }
 
-function ProjectMenu({ project: p, anchor, editor, onClose, onDuplicate, onDelete, onAddLibs, onRepo, onDatabase, onThemes, act }) {
+function ProjectMenu({ project: p, anchor, editor, onClose, onDuplicate, onDelete, onAddLibs, onRepo, onDatabase, onThemes, onIdeas, act }) {
   if (!p) return null
   const run = (fn) => { onClose(); fn() }
   const remote = Boolean(p.remoteOnly)
@@ -506,6 +528,7 @@ function ProjectMenu({ project: p, anchor, editor, onClose, onDuplicate, onDelet
       )}
       <button onClick={() => run(() => onDatabase(p))}><Database size={15} /> Configurer la base</button>
       <button onClick={() => run(() => onThemes(p))}><Tag size={15} /> Thèmes</button>
+      <button onClick={() => run(() => onIdeas(p))}><CheckSquare size={15} /> Idées</button>
       <button onClick={() => run(() => onDuplicate(p))}><Copy size={15} /> Dupliquer</button>
       <button onClick={() => run(() => act(() => api.blueprint.fromProject({ id: p.id, name: `Base ${p.name}` }), 'Blueprint créé'))}>
         <Bookmark size={15} /> En faire un blueprint
