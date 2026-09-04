@@ -785,3 +785,105 @@ export async function board(projects = []) {
 
   return { ok: true, at: Date.now(), summary, rows }
 }
+
+function dayKey(ts) {
+  const d = new Date(ts)
+  if (!Number.isFinite(d.getTime())) return null
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function startOfLocalDay(ts = Date.now()) {
+  const d = new Date(ts)
+  d.setHours(0, 0, 0, 0)
+  return d.getTime()
+}
+
+/**
+ * Calendrier d’activité style GitHub : commits locaux + push atelier, par jour.
+ * @param {Array} projects
+ * @param {Array} pushLog
+ * @param {number} weeks
+ */
+export async function activityCalendar(projects = [], pushLog = [], weeks = 17) {
+  const today = startOfLocalDay()
+  const spanDays = weeks * 7
+  const sinceTs = today - (spanDays - 1) * 86400000
+  const sinceSec = Math.floor(sinceTs / 1000)
+  const byDay = new Map()
+
+  const bump = (at, event) => {
+    const key = dayKey(at)
+    if (!key) return
+    const t = startOfLocalDay(at)
+    if (t < sinceTs || t > today) return
+    let row = byDay.get(key)
+    if (!row) {
+      row = { date: key, at: t, count: 0, events: [] }
+      byDay.set(key, row)
+    }
+    row.count += 1
+    if (row.items.length < 12) row.items.push(event)
+  }
+
+  await Promise.all((projects || []).map(async (p) => {
+    if (!p?.path || p.remoteOnly || p.exists === false || !existsSync(p.path)) return
+    const inside = await run('git rev-parse --is-inside-work-tree', p.path)
+    if (!inside.ok || inside.stdout.trim() !== 'true') return
+    const log = await run(
+      `git log --all --since=${sinceSec} --pretty=format:%ct%x09%h%x09%s`,
+      p.path
+    )
+    if (!log.ok || !log.stdout.trim()) return
+    for (const line of log.stdout.trim().split(/\r?\n/)) {
+      const [sec, hash, ...rest] = line.split('\t')
+      const at = Number(sec) * 1000
+      if (!Number.isFinite(at)) continue
+      bump(at, {
+        type: 'commit',
+        projectId: p.id,
+        name: p.name,
+        hash: (hash || '').slice(0, 7),
+        message: rest.join('\t').trim() || 'Commit',
+        at
+      })
+    }
+  }))
+
+  for (const entry of pushLog || []) {
+    if (!entry?.at) continue
+    bump(entry.at, {
+      type: 'push',
+      projectId: entry.projectId,
+      name: entry.name,
+      hash: entry.hash || '',
+      message: entry.message || 'Push',
+      at: entry.at,
+      url: entry.url || null
+    })
+  }
+
+  const days = []
+  for (let i = 0; i < spanDays; i++) {
+    const at = sinceTs + i * 86400000
+    const key = dayKey(at)
+    const hit = byDay.get(key)
+    days.push(hit || { date: key, at, count: 0, items: [] })
+  }
+
+  const max = days.reduce((n, d) => Math.max(n, d.count), 0)
+  const total = days.reduce((n, d) => n + d.count, 0)
+  const activeDays = days.filter((d) => d.count > 0).length
+
+  return {
+    weeks,
+    since: sinceTs,
+    until: today,
+    max,
+    total,
+    activeDays,
+    days
+  }
+}

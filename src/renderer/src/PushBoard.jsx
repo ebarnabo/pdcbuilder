@@ -1,35 +1,78 @@
-import { useCallback, useEffect, useState } from 'react'
-import {
-  CloudUpload, CloudDownload, Github, RefreshCw, GitBranch, GitCommitHorizontal,
-  CircleDot, ArrowUp, ArrowDown, FileWarning, ExternalLink, ChevronDown
-} from 'lucide-react'
-import { ago } from './ui.jsx'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { CloudUpload, RefreshCw, ChevronDown } from 'lucide-react'
 import { api } from './bridge.js'
 
-const STATE = {
-  draft: { label: 'Brouillon local', hint: 'Des changements attendent un commit / push', tone: 'warn' },
-  ahead: { label: 'À pousser', hint: 'Commits locaux pas encore sur le remote', tone: 'accent' },
-  diverged: { label: 'Divergence', hint: 'Avance et retard — à réconcilier', tone: 'err' },
-  behind: { label: 'À récupérer', hint: 'Le remote a des commits que tu n’as pas', tone: 'warn' },
-  synced: { label: 'À jour', hint: 'Local et remote alignés', tone: 'ok' },
-  noremote: { label: 'Sans remote', hint: 'Pas encore lié à GitHub', tone: 'muted' },
-  remote: { label: 'Distant seulement', hint: 'Pas encore cloné dans l’atelier', tone: 'muted' },
-  missing: { label: 'Dossier manquant', hint: 'Le chemin local n’existe plus', tone: 'err' },
-  nogit: { label: 'Pas de Git', hint: 'Initialise ou lie un dépôt', tone: 'muted' }
+const WEEKDAYS = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam']
+const MONTHS = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.']
+
+function levelFor(count, max) {
+  if (!count) return 0
+  if (!max || max <= 1) return count ? 1 : 0
+  const r = count / max
+  if (r <= 0.25) return 1
+  if (r <= 0.5) return 2
+  if (r <= 0.75) return 3
+  return 4
 }
 
-function stateMeta(id) {
-  return STATE[id] || STATE.synced
+function formatDay(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const dt = new Date(y, m - 1, d)
+  return `${WEEKDAYS[dt.getDay()]} ${d} ${MONTHS[m - 1]} ${y}`
 }
 
-export default function PushBoard({ projects, toast, act, focusProject, onPush, refreshKey }) {
+function buildWeeks(days) {
+  if (!days?.length) return []
+  const weeks = []
+  let col = []
+  // Pad start so columns are Sunday→Saturday like GitHub
+  const first = new Date(days[0].at)
+  const pad = first.getDay() // 0 = Sunday
+  for (let i = 0; i < pad; i++) col.push(null)
+  for (const day of days) {
+    col.push(day)
+    if (col.length === 7) {
+      weeks.push(col)
+      col = []
+    }
+  }
+  if (col.length) {
+    while (col.length < 7) col.push(null)
+    weeks.push(col)
+  }
+  return weeks
+}
+
+function monthLabels(weeks) {
+  const labels = []
+  let prev = ''
+  weeks.forEach((week, i) => {
+    const first = week.find((d) => d)
+    if (!first) {
+      labels.push('')
+      return
+    }
+    const m = MONTHS[new Date(first.at).getMonth()]
+    if (m !== prev) {
+      labels.push(m)
+      prev = m
+    } else {
+      labels.push('')
+    }
+  })
+  return labels
+}
+
+export default function PushBoard({ projects, toast, refreshKey }) {
   const [open, setOpen] = useState(true)
   const [loading, setLoading] = useState(false)
   const [board, setBoard] = useState(null)
+  const [hover, setHover] = useState(null) // { day, x, y }
+  const heatRef = useRef(null)
 
   const load = useCallback(async () => {
     if (!projects?.length) {
-      setBoard({ ok: true, summary: { total: 0, draft: 0, ahead: 0, behind: 0, synced: 0, remote: 0 }, rows: [], log: [] })
+      setBoard(null)
       return
     }
     setLoading(true)
@@ -37,7 +80,7 @@ export default function PushBoard({ projects, toast, act, focusProject, onPush, 
       const r = await api.git.board()
       setBoard(r)
     } catch (e) {
-      toast?.(e?.message || 'Impossible de lire les dépôts', true)
+      toast?.(e?.message || 'Impossible de lire l’activité', true)
     } finally {
       setLoading(false)
     }
@@ -45,12 +88,26 @@ export default function PushBoard({ projects, toast, act, focusProject, onPush, 
 
   useEffect(() => { load() }, [load, refreshKey])
 
+  const calendar = board?.calendar
+  const weeks = useMemo(() => buildWeeks(calendar?.days || []), [calendar?.days])
+  const labels = useMemo(() => monthLabels(weeks), [weeks])
+  const summary = board?.summary
+  const actionCount = summary
+    ? (summary.draft || 0) + (summary.ahead || 0) + (summary.behind || 0)
+    : 0
+
   if (!projects?.length) return null
 
-  const summary = board?.summary
-  const rows = board?.rows || []
-  const log = board?.log || []
-  const work = rows.filter((r) => ['draft', 'ahead', 'diverged', 'behind'].includes(r.state))
+  const showTip = (day, el) => {
+    const rect = el.getBoundingClientRect()
+    const root = heatRef.current?.getBoundingClientRect()
+    if (!root) return
+    setHover({
+      day,
+      x: rect.left - root.left + rect.width / 2,
+      y: rect.top - root.top
+    })
+  }
 
   return (
     <section className={`push-board${open ? ' open' : ''}`} aria-label="Carte des push">
@@ -59,19 +116,15 @@ export default function PushBoard({ projects, toast, act, focusProject, onPush, 
           <CloudUpload size={18} strokeWidth={1.8} />
           <div>
             <strong>Carte des push</strong>
-            <span>Suivi des travaux sur tes dépôts</span>
+            <span>
+              {calendar
+                ? `${calendar.total} activité${calendar.total > 1 ? 's' : ''} · ${calendar.activeDays} jour${calendar.activeDays > 1 ? 's' : ''}`
+                : 'Activité sur tes dépôts'}
+            </span>
           </div>
         </div>
         <div className="push-board-stats">
-          {summary && (
-            <>
-              {(summary.draft + summary.ahead) > 0 && (
-                <span className="chip accent">{summary.draft + summary.ahead} en cours</span>
-              )}
-              {summary.behind > 0 && <span className="chip">{summary.behind} à tirer</span>}
-              <span className="chip ok">{summary.synced} à jour</span>
-            </>
-          )}
+          {actionCount > 0 && <span className="chip accent">{actionCount} à traiter</span>}
           <ChevronDown size={16} className={`push-chevron${open ? ' up' : ''}`} />
         </div>
       </button>
@@ -80,165 +133,94 @@ export default function PushBoard({ projects, toast, act, focusProject, onPush, 
         <div className="push-board-body">
           <div className="push-board-toolbar">
             <p className="form-section-lead" style={{ margin: 0 }}>
-              {work.length
-                ? `${work.length} dépôt${work.length > 1 ? 's' : ''} demande${work.length > 1 ? 'nt' : ''} une action.`
-                : 'Tous les dépôts locaux scannés sont alignés — ou sans remote.'}
+              Chaque point = un jour avec commits ou push. Survole pour le détail.
             </p>
-            <button type="button" className="btn sm ghost" disabled={loading} onClick={load} title="Rescanner les dépôts">
+            <button type="button" className="btn sm ghost" disabled={loading} onClick={load}>
               <RefreshCw size={14} className={loading ? 'spin' : ''} /> Actualiser
             </button>
           </div>
 
-          {loading && !rows.length ? (
-            <p className="push-board-empty">Lecture des commits…</p>
+          {loading && !calendar ? (
+            <p className="push-board-empty">Lecture de l’activité…</p>
           ) : (
-            <div className="push-track">
-              {rows.map((row) => (
-                <PushCard
-                  key={row.projectId}
-                  row={row}
-                  act={act}
-                  focusProject={focusProject}
-                  onPush={onPush}
-                  toast={toast}
-                  onDone={load}
-                />
-              ))}
-            </div>
-          )}
-
-          {log.length > 0 && (
-            <div className="push-feed">
-              <h5>Derniers push depuis l’atelier</h5>
-              <ul>
-                {log.slice(0, 12).map((e) => (
-                  <li key={e.id}>
-                    <GitCommitHorizontal size={14} />
-                    <div>
-                      <strong>{e.name}</strong>
-                      <span>{e.message}</span>
-                    </div>
-                    <time dateTime={new Date(e.at).toISOString()}>{ago(e.at)}</time>
-                    {e.url && (
-                      <button type="button" className="btn icon sm ghost" aria-label="Ouvrir le dépôt" onClick={() => api.fs.openUrl(e.url)}>
-                        <ExternalLink size={13} />
-                      </button>
-                    )}
-                  </li>
+            <div className="push-heat-wrap" ref={heatRef} onMouseLeave={() => setHover(null)}>
+              <div className="push-heat-months" aria-hidden>
+                <span className="push-heat-spacer" />
+                {labels.map((label, i) => (
+                  <span key={`m-${i}`} className="push-heat-month">{label}</span>
                 ))}
-              </ul>
+              </div>
+              <div className="push-heat">
+                <div className="push-heat-days" aria-hidden>
+                  {WEEKDAYS.map((d, i) => (
+                    <span key={d} className={i % 2 === 1 ? 'on' : ''}>{i % 2 === 1 ? d : ''}</span>
+                  ))}
+                </div>
+                <div className="push-heat-grid" role="img" aria-label="Calendrier d’activité Git">
+                  {weeks.map((week, wi) => (
+                    <div className="push-heat-col" key={`w-${wi}`}>
+                      {week.map((day, di) => {
+                        if (!day) return <span key={`e-${wi}-${di}`} className="push-heat-cell empty" />
+                        const lvl = levelFor(day.count, calendar?.max || 0)
+                        return (
+                          <button
+                            key={day.date}
+                            type="button"
+                            className={`push-heat-cell l${lvl}`}
+                            aria-label={`${formatDay(day.date)} · ${day.count} activité${day.count > 1 ? 's' : ''}`}
+                            onMouseEnter={(e) => showTip(day, e.currentTarget)}
+                            onFocus={(e) => showTip(day, e.currentTarget)}
+                            onBlur={() => setHover(null)}
+                          />
+                        )
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="push-heat-legend">
+                <span>Moins</span>
+                {[0, 1, 2, 3, 4].map((l) => (
+                  <i key={l} className={`push-heat-cell l${l}`} aria-hidden />
+                ))}
+                <span>Plus</span>
+              </div>
+
+              {hover?.day && (
+                <div
+                  className="push-heat-tip"
+                  style={{ left: hover.x, top: hover.y }}
+                  role="tooltip"
+                >
+                  <strong>{formatDay(hover.day.date)}</strong>
+                  {!hover.day.count ? (
+                    <p>Aucune activité</p>
+                  ) : (
+                    <>
+                      <p>
+                        {hover.day.count} activité{hover.day.count > 1 ? 's' : ''}
+                      </p>
+                      <ul>
+                        {hover.day.items.slice(0, 8).map((item, i) => (
+                          <li key={`${item.at}-${item.hash || i}`}>
+                            <em>{item.type === 'push' ? 'push' : 'commit'}</em>
+                            <span>{item.name}</span>
+                            <span className="push-heat-tip-msg">{item.message}</span>
+                          </li>
+                        ))}
+                        {hover.day.items.length > 8 && (
+                          <li className="more">+{hover.day.items.length - 8} autres</li>
+                        )}
+                      </ul>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
       )}
     </section>
   )
-}
-
-function PushCard({ row, act, focusProject, onPush, toast, onDone }) {
-  const meta = stateMeta(row.state)
-  const project = { id: row.projectId, name: row.name, path: row.path, repo: row.repo, remoteOnly: row.remoteOnly }
-  const busy = false
-
-  const push = async () => {
-    if (row.state === 'noremote' || !row.remote) {
-      onPush?.(project)
-      return
-    }
-    focusProject?.(row.projectId)
-    await act(() => api.git.push(row.projectId), 'Push envoyé')
-    onDone?.()
-  }
-
-  const pull = async () => {
-    focusProject?.(row.projectId)
-    await act(() => api.git.pull(row.projectId), 'Dépôt à jour')
-    onDone?.()
-  }
-
-  return (
-    <article className={`push-card tone-${meta.tone}`}>
-      <header className="push-card-head">
-        <div>
-          <h4>{row.name}</h4>
-          <p className="push-card-repo">
-            {row.repo?.fullName || row.repo?.name || shortRepo(row.path) || 'Sans dépôt'}
-          </p>
-        </div>
-        <span className={`push-badge ${meta.tone}`}>{meta.label}</span>
-      </header>
-
-      <p className="push-card-hint">{meta.hint}</p>
-
-      <div className="push-card-meta">
-        {row.branch && (
-          <span className="chip"><GitBranch size={11} /> {row.branch}</span>
-        )}
-        {row.ahead > 0 && <span className="chip accent"><ArrowUp size={11} /> {row.ahead}</span>}
-        {row.behind > 0 && <span className="chip"><ArrowDown size={11} /> {row.behind}</span>}
-        {row.dirtyCount > 0 && (
-          <span className="chip"><FileWarning size={11} /> {row.dirtyCount} fichier{row.dirtyCount > 1 ? 's' : ''}</span>
-        )}
-        {row.lastPushAt && <span className="chip">Push {ago(row.lastPushAt)}</span>}
-      </div>
-
-      {row.commits?.length > 0 && (
-        <ul className="push-commits">
-          {row.commits.slice(0, 3).map((c) => (
-            <li key={c.fullHash || c.hash}>
-              <CircleDot size={10} />
-              <code>{c.hash}</code>
-              <span className="push-commit-msg" title={c.message}>{c.message}</span>
-              <time>{ago(c.at)}</time>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {!row.commits?.length && row.head?.message && (
-        <p className="push-card-hint" style={{ marginTop: 8 }}>{row.head.message}</p>
-      )}
-
-      <div className="push-card-actions">
-        {row.state === 'remote' && (
-          <span className="chip"><Github size={11} /> Clone depuis la carte projet</span>
-        )}
-        {(row.state === 'ahead' || row.state === 'draft' || row.state === 'diverged' || row.state === 'noremote') && !row.remoteOnly && (
-          <button type="button" className="btn sm primary" disabled={busy} onClick={push}>
-            <CloudUpload size={13} /> {row.state === 'noremote' ? 'Lier / Push' : 'Pousser'}
-          </button>
-        )}
-        {(row.state === 'behind' || row.state === 'diverged') && !row.remoteOnly && (
-          <button type="button" className="btn sm" disabled={busy} onClick={pull}>
-            <CloudDownload size={13} /> Récupérer
-          </button>
-        )}
-        {row.repo?.url && (
-          <button type="button" className="btn sm ghost" onClick={() => api.fs.openUrl(row.repo.url)}>
-            <Github size={13} /> Voir
-          </button>
-        )}
-        {row.state === 'synced' && !row.remoteOnly && (
-          <button
-            type="button"
-            className="btn sm ghost"
-            onClick={async () => {
-              focusProject?.(row.projectId)
-              const r = await act(() => api.git.push(row.projectId), 'Rien à pousser — déjà à jour')
-              if (r?.ok) toast?.('Dépôt synchronisé')
-              onDone?.()
-            }}
-          >
-            <CloudUpload size={13} /> Sync
-          </button>
-        )}
-      </div>
-    </article>
-  )
-}
-
-function shortRepo(path) {
-  if (!path) return ''
-  const parts = String(path).replace(/\\/g, '/').split('/')
-  return parts[parts.length - 1] || path
 }

@@ -963,7 +963,8 @@ ipcMain.handle('git:push', async (_e, id) => {
 ipcMain.handle('git:board', async () => {
   const s = store.read()
   const board = await git.board(s.projects || [])
-  return { ...board, log: s.pushLog || [] }
+  const calendar = await git.activityCalendar(s.projects || [], s.pushLog || [], 17)
+  return { ...board, log: s.pushLog || [], calendar }
 })
 ipcMain.handle('git:link', async (_e, { id, url }) => {
   const p = projectById(id)

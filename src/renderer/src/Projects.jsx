@@ -163,9 +163,6 @@ export default function Projects({ state, refresh, toast, focusProject }) {
       <PushBoard
         projects={state.projects}
         toast={toast}
-        act={act}
-        focusProject={focusProject}
-        onPush={setRepo}
         refreshKey={buildKey + counts.github + (state.pushLog?.length || 0)}
       />
 
