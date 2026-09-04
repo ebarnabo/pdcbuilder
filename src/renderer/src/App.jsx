@@ -8,6 +8,7 @@ import Settings, { SETTINGS_SECTIONS } from './Settings.jsx'
 import Chat from './Chat.jsx'
 import Onboarding from './Onboarding.jsx'
 import ConsolePanel from './Console.jsx'
+import AiModelPicker from './AiModelPicker.jsx'
 import { BrandLockup, BrandMark, applyUiTheme } from './Brand.jsx'
 import { api, waitForApi } from './bridge.js'
 
@@ -83,6 +84,7 @@ export default function App() {
   const [catalogTab, setCatalogTab] = useState('frameworks')
   const [settingsSection, setSettingsSection] = useState('apparence')
   const [settingsJump, setSettingsJump] = useState(null)
+  const [aiProviders, setAiProviders] = useState({})
   const [logs, setLogs] = useState([])
   const [consoleH, setConsoleH] = useState(0)      // 0 = replié
   const [chatOpen, setChatOpen] = useState(false)
@@ -130,6 +132,17 @@ export default function App() {
     }).catch(() => {})
     return () => off()
   }, [])
+
+  useEffect(() => {
+    waitForApi().then(() => api.ai.providers().then(setAiProviders)).catch(() => {})
+  }, [])
+
+  const pickAiModel = useCallback(async (model) => {
+    if (!state?.ai || !model || state.ai.model === model) return
+    const next = { ...state.ai, model }
+    await api.state.patch({ ai: next })
+    refresh()
+  }, [state?.ai, refresh])
 
   useEffect(() => {
     let unsub = () => {}
@@ -322,6 +335,12 @@ export default function App() {
           <span className="sub">{meta.sub}</span>
           <div className="spacer" />
           {active && <span className="chip accent">Actif · {active.name}</span>}
+          <AiModelPicker
+            ai={state.ai}
+            providers={aiProviders}
+            onPick={pickAiModel}
+            toast={notify}
+          />
           <WindowControls />
         </header>
 

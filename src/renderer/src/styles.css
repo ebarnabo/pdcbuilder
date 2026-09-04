@@ -322,6 +322,33 @@ html[data-ui="cap"] .brand h1 {
 }
 .topbar h2 { font-size: 16px; font-weight: 650; margin: 0; letter-spacing: -0.02em; line-height: 1.2; }
 .topbar .sub { color: var(--text-3); font-size: 12.5px; line-height: 1.2; }
+
+.topbar-ai {
+  display: inline-flex; align-items: center; gap: 6px;
+  max-width: min(280px, 36vw); height: 30px; padding: 0 4px 0 10px;
+  color: var(--text-2); background: var(--p2);
+  border-radius: var(--r-sm);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.topbar-ai svg { flex: none; color: var(--accent); opacity: 0.9; }
+.topbar-ai-select {
+  min-width: 0; flex: 1; max-width: 220px;
+  height: 100%; padding: 0 4px; border: 0; border-radius: 0;
+  background: transparent; color: var(--text); font-size: 12px; font-weight: 550;
+  font-family: inherit; cursor: pointer; outline: none;
+  text-overflow: ellipsis;
+}
+.topbar-ai-select:focus-visible { color: var(--accent); }
+.topbar-ai-refresh {
+  flex: none; width: 26px; height: 26px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 0; border-radius: calc(var(--r-sm) - 2px);
+  background: transparent; color: var(--text-3); cursor: pointer;
+  transition: color 0.15s var(--ease), background 0.15s var(--ease);
+}
+.topbar-ai-refresh:hover:not(:disabled) { color: var(--text); background: var(--p3); }
+.topbar-ai-refresh:disabled { opacity: 0.5; cursor: default; }
+
 .spacer { flex: 1; min-width: 12px; }
 
 .win-controls {
