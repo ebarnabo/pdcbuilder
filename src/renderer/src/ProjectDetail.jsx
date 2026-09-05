@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import {
   ArrowLeft, Play, Square, Hammer, Package, Plus, Github, CloudDownload, CloudUpload,
-  Globe, ExternalLink, FolderOpen, Code2, Database, CheckSquare, Tag, GanttChart, Sparkles
+  Globe, ExternalLink, FolderOpen, Code2, Database, CheckSquare, Tag, GanttChart, Sparkles, Presentation
 } from 'lucide-react'
 import { LibraryPicker, bytes, ago, shortPath, Empty } from './ui.jsx'
 import { RepoChip } from './GitFields.jsx'
@@ -34,6 +34,7 @@ export default function ProjectDetail({
   onThemes,
   onDatabase,
   onRepo,
+  onShowroom,
   refresh,
   onAskAgent
 }) {
@@ -162,6 +163,11 @@ export default function ProjectDetail({
             )}
             {build?.exists && <span className="chip ok">build {bytes(build.size)}</span>}
             <RepoChip repo={p.repo} onOpen={(url) => api.fs.openUrl(url)} />
+            {p.showroom?.url && (
+              <button type="button" className="chip link accent" onClick={() => api.fs.openUrl(p.showroom.url)}>
+                <Presentation size={11} /> Showroom
+              </button>
+            )}
             {ideas.total > 0 && (
               <button type="button" className="chip link accent" onClick={onIdeas}>
                 <CheckSquare size={11} /> {ideas.done}/{ideas.total} idées
@@ -221,6 +227,9 @@ export default function ProjectDetail({
               )}
               <button className="btn ghost" onClick={onThemes}>Thèmes</button>
               <button className="btn ghost" onClick={onDatabase}>Base</button>
+              <button className="btn ghost" onClick={onShowroom}>
+                <Presentation size={15} /> Showroom
+              </button>
               {!p.repo?.url && <button className="btn ghost" onClick={onRepo}>Dépôt</button>}
             </>
           )}

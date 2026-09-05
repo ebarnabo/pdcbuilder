@@ -11,7 +11,7 @@ import { DATABASES } from './database.js'
 import { MANAGERS } from './pm.js'
 
 const SECRET_KEYS = new Set([
-  'token', 'apiKey', 'deployKey', 'password', 'secret', 'binary'
+  'token', 'apiKey', 'deployKey', 'password', 'secret', 'binary', 'refreshToken'
 ])
 
 function globalFile() {

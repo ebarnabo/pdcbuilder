@@ -19,6 +19,7 @@ import * as payloadCms from './payload.js'
 import * as sanityCms from './sanity.js'
 import * as wordpressCms from './wordpress.js'
 import * as medusaCms from './medusa.js'
+import * as showroom from './showroom.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const isMac = platform() === 'darwin'
@@ -1547,3 +1548,15 @@ ipcMain.handle('docs:refresh', () => docs.refresh({ force: true }))
 ipcMain.handle('docs:open', () => docs.openFolder())
 ipcMain.handle('preferences:path', () => preferences.path())
 ipcMain.handle('preferences:open', () => preferences.openFolder())
+
+ipcMain.handle('showroom:status', () => showroom.status())
+ipcMain.handle('showroom:list', () => showroom.listProjects())
+ipcMain.handle('showroom:suggest', (_e, id) => {
+  const s = store.read()
+  const p = s.projects.find((x) => x.id === id)
+  if (!p) return { ok: false, error: 'Projet introuvable' }
+  return { ok: true, ...showroom.suggestFromProject(p, s.frameworks) }
+})
+ipcMain.handle('showroom:publish', async (_e, payload) => showroom.publish(payload || {}))
+ipcMain.handle('showroom:login', async () => showroom.login(win))
+ipcMain.handle('showroom:logout', () => showroom.logout())

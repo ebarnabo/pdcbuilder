@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import {
   Play, Square, Hammer, FolderOpen, Copy, Trash2, Globe, Plus, Package,
   Code2, Layers, MoreHorizontal, FolderInput, Bookmark, Boxes, ExternalLink,
-  Github, CloudUpload, CloudDownload, Link2, Database, Tag, Search, RefreshCw, Sparkles
+  Github, CloudUpload, CloudDownload, Link2, Database, Tag, Search, RefreshCw, Sparkles, Presentation
 } from 'lucide-react'
 import { Modal, Menu, Field, SearchBox, LibraryPicker, Empty, bytes, ago, shortPath, Segmented, ScoreNotes, Confirm } from './ui.jsx'
 import { GitFields, RepoChip, CloneModal } from './GitFields.jsx'
@@ -20,6 +20,7 @@ import PayloadSetup from './PayloadSetup.jsx'
 import SanitySetup from './SanitySetup.jsx'
 import WordpressSetup from './WordpressSetup.jsx'
 import MedusaSetup from './MedusaSetup.jsx'
+import ShowroomPublishModal from './ShowroomPublish.jsx'
 import { api } from './bridge.js'
 
 export default function Projects({
@@ -49,6 +50,7 @@ export default function Projects({
   const [detailId, setDetailId] = useState(null)
   const [busySync, setBusySync] = useState(false)
   const [busyScan, setBusyScan] = useState(false)
+  const [showroomFor, setShowroomFor] = useState(null)
 
   const fwById = useMemo(() => Object.fromEntries(state.frameworks.map((f) => [f.id, f])), [state.frameworks])
 
@@ -142,6 +144,7 @@ export default function Projects({
           onThemes={() => setThemesFor(detail)}
           onDatabase={() => setDb(detail)}
           onRepo={() => setRepo(detail)}
+          onShowroom={() => setShowroomFor(detail)}
           refresh={refresh}
           onAskAgent={onAskAgent}
         />
@@ -184,6 +187,16 @@ export default function Projects({
             state={state}
             onClose={() => setRepo(null)}
             act={act}
+          />
+        )}
+
+        {showroomFor && (
+          <ShowroomPublishModal
+            project={state.projects.find((p) => p.id === showroomFor.id) || showroomFor}
+            state={state}
+            onClose={() => setShowroomFor(null)}
+            toast={toast}
+            refresh={refresh}
           />
         )}
       </>
@@ -307,6 +320,7 @@ export default function Projects({
               onMenu={(el) => setMenu(menu?.id === p.id ? null : { id: p.id, el })}
               onTheme={(id) => setThemeFilter((cur) => toggleTheme(cur, id))}
               onPush={() => setRepo(p)}
+              onShowroom={() => setShowroomFor(p)}
               onAskAgent={onAskAgent}
               cardActions={state.projectCard}
               act={act}
@@ -329,6 +343,7 @@ export default function Projects({
           onRepo={setRepo}
           onDatabase={setDb}
           onThemes={setThemesFor}
+          onShowroom={setShowroomFor}
           onAskAgent={onAskAgent}
           onOpen={(p) => setDetailId(p.id)}
           act={act}
@@ -469,13 +484,23 @@ export default function Projects({
           <div className="card-path" style={{ direction: 'rtl', textAlign: 'left' }}>{del.path}</div>
         </Modal>
       )}
+
+      {showroomFor && (
+        <ShowroomPublishModal
+          project={state.projects.find((p) => p.id === showroomFor.id) || showroomFor}
+          state={state}
+          onClose={() => setShowroomFor(null)}
+          toast={toast}
+          refresh={refresh}
+        />
+      )}
     </>
   )
 }
 
 /* ─────────────────────────  carte projet  ───────────────────────── */
 
-function ProjectCard({ project: p, framework: fw, build, index, onOpen, onMenu, onTheme, onPush, onAskAgent, act, focusProject, toast, cardActions }) {
+function ProjectCard({ project: p, framework: fw, build, index, onOpen, onMenu, onTheme, onPush, onShowroom, onAskAgent, act, focusProject, toast, cardActions }) {
   const btnRef = useRef(null)
   const remote = Boolean(p.remoteOnly)
   const busy = p.status === 'scaffolding' || p.status === 'cloning'
@@ -487,7 +512,8 @@ function ProjectCard({ project: p, framework: fw, build, index, onOpen, onMenu, 
     pull: cardActions?.pull !== false,
     push: cardActions?.push !== false,
     out: cardActions?.out !== false,
-    preview: cardActions?.preview !== false
+    preview: cardActions?.preview !== false,
+    showroom: cardActions?.showroom !== false
   }
 
   const statusLabel = remote ? 'Sur GitHub · pas encore local'
@@ -549,6 +575,16 @@ function ProjectCard({ project: p, framework: fw, build, index, onOpen, onMenu, 
         )}
         {build?.exists && <span className="chip ok">build {bytes(build.size)}</span>}
         <RepoChip repo={p.repo} onOpen={(url) => api.fs.openUrl(url)} />
+        {p.showroom?.url && (
+          <button
+            type="button"
+            className="chip link accent"
+            onClick={() => api.fs.openUrl(p.showroom.url)}
+            title={p.showroom.url}
+          >
+            <Presentation size={11} /> Showroom
+          </button>
+        )}
         {!remote && p.exists === false && <span className="chip err">dossier introuvable</span>}
         {needsPush && <span className="chip">Brouillon local</span>}
       </div>
@@ -649,6 +685,16 @@ function ProjectCard({ project: p, framework: fw, build, index, onOpen, onMenu, 
             {show.preview && build?.exists && (
               <button className="btn sm ghost" onClick={() => act(() => api.run.openBuildFile(p.id))}>Aperçu</button>
             )}
+            {show.showroom && (
+              <button
+                className="btn sm ghost"
+                disabled={busy}
+                title="Publier sur pdc-design-showroom"
+                onClick={onShowroom}
+              >
+                <Presentation size={13} /> Showroom
+              </button>
+            )}
           </>
         )}
       </div>
@@ -656,7 +702,7 @@ function ProjectCard({ project: p, framework: fw, build, index, onOpen, onMenu, 
   )
 }
 
-function ProjectMenu({ project: p, anchor, editor, onClose, onDuplicate, onDelete, onAddLibs, onRepo, onDatabase, onThemes, onAskAgent, onOpen, act }) {
+function ProjectMenu({ project: p, anchor, editor, onClose, onDuplicate, onDelete, onAddLibs, onRepo, onDatabase, onThemes, onShowroom, onAskAgent, onOpen, act }) {
   if (!p) return null
   const run = (fn) => { onClose(); fn() }
   const remote = Boolean(p.remoteOnly)
@@ -697,6 +743,14 @@ function ProjectMenu({ project: p, anchor, editor, onClose, onDuplicate, onDelet
         </>
       ) : (
         <button onClick={() => run(() => onRepo(p))}><CloudUpload size={15} /> Pousser sur GitHub</button>
+      )}
+      <button onClick={() => run(() => onShowroom?.(p))}>
+        <Presentation size={15} /> Publier sur le showroom
+      </button>
+      {p.showroom?.url && (
+        <button onClick={() => run(() => api.fs.openUrl(p.showroom.url))}>
+          <ExternalLink size={15} /> Ouvrir le lien showroom
+        </button>
       )}
       <hr />
       <button onClick={() => run(() => onOpen?.(p))}><Package size={15} /> Librairies du projet</button>

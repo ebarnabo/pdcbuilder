@@ -739,7 +739,8 @@ export const DEFAULTS = {
     pull: true,
     push: true,
     out: true,
-    preview: true
+    preview: true,
+    showroom: true
   },
   git: {
     autoCreate: true,
@@ -768,6 +769,17 @@ export const DEFAULTS = {
     completed: false,
     version: 1,
     skipped: []
+  },
+  /** Publication vers pdc-design-showroom (Firestore + maquettes locales). */
+  showroom: {
+    siteUrl: '',
+    repoPath: '',
+    apiKey: '',
+    projectId: '',
+    authDomain: '',
+    refreshToken: '',
+    uid: '',
+    email: ''
   }
 }
 
@@ -842,6 +854,7 @@ export function read() {
         ai: { ...DEFAULTS.ai, ...(parsed.ai || {}) },
         projectCard: { ...DEFAULTS.projectCard, ...(parsed.projectCard || {}) },
         git: { ...DEFAULTS.git, ...(parsed.git || {}) },
+        showroom: { ...DEFAULTS.showroom, ...(parsed.showroom || {}) },
         database: {
           ...DEFAULTS.database,
           ...(parsed.database || {}),

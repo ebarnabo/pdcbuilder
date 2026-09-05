@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import {
   RefreshCw, Check, FolderOpen, Download, BookOpen, FileText,
-  Palette, Wrench, Boxes, Sparkles, Database, Github, Cpu, FileCode2
+  Palette, Wrench, Boxes, Sparkles, Database, Github, Cpu, FileCode2, Presentation
 } from 'lucide-react'
 import { Field, ScoreNotes } from './ui.jsx'
 import { GitFields, GitStatus } from './GitFields.jsx'
@@ -17,6 +17,7 @@ export const SETTINGS_SECTIONS = [
   { id: 'atelier', label: 'Atelier', icon: Wrench },
   { id: 'sdk', label: 'SDK & outils', icon: Cpu },
   { id: 'git', label: 'Dépôts Git', icon: Github },
+  { id: 'showroom', label: 'Showroom', icon: Presentation },
   { id: 'database', label: 'Bases', icon: Database },
   { id: 'ai', label: 'IA', icon: Sparkles },
   { id: 'docs', label: 'Docs', icon: BookOpen },
@@ -30,7 +31,8 @@ const PROJECT_CARD_TOGGLES = [
   { id: 'pull', label: 'Pull' },
   { id: 'push', label: 'Push / Push GitHub' },
   { id: 'out', label: 'Sortie (dossier build)' },
-  { id: 'preview', label: 'Aperçu build' }
+  { id: 'preview', label: 'Aperçu build' },
+  { id: 'showroom', label: 'Showroom' }
 ]
 
 export default function Settings({
@@ -61,8 +63,19 @@ export default function Settings({
     push: true,
     out: true,
     preview: true,
+    showroom: true,
     ...(state.projectCard || {})
   }))
+  const [showroom, setShowroom] = useState(() => ({
+    siteUrl: '',
+    repoPath: '',
+    apiKey: '',
+    projectId: '',
+    authDomain: '',
+    ...(state.showroom || {})
+  }))
+  const [showroomStatus, setShowroomStatus] = useState(null)
+  const [showroomBusy, setShowroomBusy] = useState(false)
   const rootRef = useRef(null)
   const jumping = useRef(false)
 
@@ -77,9 +90,41 @@ export default function Settings({
       push: true,
       out: true,
       preview: true,
+      showroom: true,
       ...(state.projectCard || {})
     })
   }, [state.projectCard])
+
+  useEffect(() => {
+    setShowroom({
+      siteUrl: '',
+      repoPath: '',
+      apiKey: '',
+      projectId: '',
+      authDomain: '',
+      ...(state.showroom || {})
+    })
+  }, [state.showroom])
+
+  useEffect(() => {
+    api.showroom.status().then(setShowroomStatus).catch(() => {})
+  }, [state.showroom?.refreshToken, state.showroom?.siteUrl, state.showroom?.projectId])
+
+  const saveShowroom = (next) => {
+    const merged = {
+      siteUrl: '',
+      repoPath: '',
+      apiKey: '',
+      projectId: '',
+      authDomain: '',
+      refreshToken: state.showroom?.refreshToken || '',
+      uid: state.showroom?.uid || '',
+      email: state.showroom?.email || '',
+      ...next
+    }
+    setShowroom(merged)
+    save({ showroom: merged })
+  }
 
   useEffect(() => {
     const root = rootRef.current
@@ -278,6 +323,131 @@ export default function Settings({
         </p>
         <GitFields value={git} status={gitStatus} showAuto onChange={(next) => saveGit(next)} />
         <GitStatus status={gitStatus} onRefresh={() => api.git.status().then(setGitStatus)} />
+      </section>
+
+      <section className="card settings-section" data-settings-section="showroom" id="settings-showroom">
+        <h4 className="card-title">Showroom PDC</h4>
+        <p className="card-desc">
+          Publie un projet atelier sur pdc-design-showroom : entrée Firestore + URL{' '}
+          <code className="mono">/projet/&#123;slug&#125;</code>, et copie optionnelle dans{' '}
+          <code className="mono">public/maquettes/</code>.
+        </p>
+        <Field label="URL publique du site" hint="Ex. https://ton-showroom.netlify.app">
+          <input
+            className="input mono"
+            value={showroom.siteUrl || ''}
+            onChange={(e) => setShowroom({ ...showroom, siteUrl: e.target.value })}
+            onBlur={() => saveShowroom(showroom)}
+            placeholder="https://…"
+          />
+        </Field>
+        <Field
+          label="Dépôt local du showroom"
+          hint="Clone de ebarnabo/pdc-design-showroom — pour copier les maquettes HTML."
+        >
+          <div className="row">
+            <input
+              className="input mono"
+              value={showroom.repoPath || ''}
+              onChange={(e) => setShowroom({ ...showroom, repoPath: e.target.value })}
+              onBlur={() => saveShowroom(showroom)}
+              placeholder="C:\…\pdc-design-showroom"
+            />
+            <button
+              type="button"
+              className="btn none"
+              onClick={async () => {
+                const d = await api.fs.pickDir()
+                if (d) saveShowroom({ ...showroom, repoPath: d })
+              }}
+            >
+              Choisir
+            </button>
+            {showroom.repoPath && (
+              <button type="button" className="btn icon none" aria-label="Ouvrir" onClick={() => api.fs.openPath(showroom.repoPath)}>
+                <FolderOpen size={16} />
+              </button>
+            )}
+          </div>
+        </Field>
+        <Field label="Firebase projectId">
+          <input
+            className="input mono"
+            value={showroom.projectId || ''}
+            onChange={(e) => setShowroom({ ...showroom, projectId: e.target.value })}
+            onBlur={() => saveShowroom(showroom)}
+            placeholder="ton-projet-firebase"
+          />
+        </Field>
+        <Field label="Firebase apiKey (Web)">
+          <input
+            className="input mono"
+            type="password"
+            value={showroom.apiKey || ''}
+            onChange={(e) => setShowroom({ ...showroom, apiKey: e.target.value })}
+            onBlur={() => saveShowroom(showroom)}
+            placeholder="AIza…"
+            autoComplete="off"
+          />
+        </Field>
+        <Field label="authDomain" hint="Optionnel — défaut : {projectId}.firebaseapp.com">
+          <input
+            className="input mono"
+            value={showroom.authDomain || ''}
+            onChange={(e) => setShowroom({ ...showroom, authDomain: e.target.value })}
+            onBlur={() => saveShowroom(showroom)}
+            placeholder="projet.firebaseapp.com"
+          />
+        </Field>
+        <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+          {showroomStatus?.connected ? (
+            <>
+              <span className="chip ok">
+                <Check size={12} /> {showroomStatus.email || showroomStatus.uid || 'Connecté'}
+              </span>
+              <button
+                type="button"
+                className="btn ghost"
+                disabled={showroomBusy}
+                onClick={async () => {
+                  await api.showroom.logout()
+                  refresh()
+                  const st = await api.showroom.status()
+                  setShowroomStatus(st)
+                  toast('Déconnecté du showroom')
+                }}
+              >
+                Déconnecter
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              className="btn primary"
+              disabled={showroomBusy || !(showroom.apiKey && showroom.projectId)}
+              onClick={async () => {
+                setShowroomBusy(true)
+                try {
+                  saveShowroom(showroom)
+                  const r = await api.showroom.login()
+                  if (r?.error || r?.ok === false) toast(r.error || 'Connexion échouée', true)
+                  else toast(`Connecté${r.email ? ` · ${r.email}` : ''}`)
+                  refresh()
+                  setShowroomStatus(await api.showroom.status())
+                } finally {
+                  setShowroomBusy(false)
+                }
+              }}
+            >
+              Se connecter avec Google
+            </button>
+          )}
+          {showroom.siteUrl && (
+            <button type="button" className="btn ghost" onClick={() => api.fs.openUrl(showroom.siteUrl)}>
+              Ouvrir le site
+            </button>
+          )}
+        </div>
       </section>
 
       <section className="card settings-section" data-settings-section="database" id="settings-database">

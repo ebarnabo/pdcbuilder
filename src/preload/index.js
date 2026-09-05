@@ -127,6 +127,14 @@ const api = {
     path: invoke('preferences:path'),
     open: invoke('preferences:open')
   },
+  showroom: {
+    status: invoke('showroom:status'),
+    list: invoke('showroom:list'),
+    suggest: invoke('showroom:suggest'),
+    publish: invoke('showroom:publish'),
+    login: invoke('showroom:login'),
+    logout: invoke('showroom:logout')
+  },
 
   on: (channel, handler) => {
     const listener = (_e, payload) => handler(payload)
